@@ -1,8 +1,11 @@
 # Import required modules
 import os
+import json
 from discord.ext import commands, tasks
 from discord import Intents
 from dotenv import load_dotenv
+from scheduler import Scheduler
+from team_member import TeamMember
 
 # Load environment variables from the .env file
 load_dotenv()
@@ -14,6 +17,7 @@ CHANNEL_TOKEN = int(os.getenv('DISCORD_CHANNEL_TOKEN'))
 
 # Initialize bot with default intents
 intents = Intents.default()
+intents.members = True
 bot = commands.Bot(command_prefix='!', intents=intents)
 
 # Define a loop that runs every 48 hours to ping for status updates
@@ -25,11 +29,33 @@ async def ping_for_status():
     # Send a message to the channel to ping everyone for a status update
     await channel.send("Hey @everyone, time for a status update! Please share what you've been working on.")
 
-# Event triggered when the bot is ready
+async def send_status_request(member: TeamMember) -> None:
+    user = bot.get_user(member.discord_id)
+    if user:
+        await user.send(f"Good morning {member.name}, time for your status update!")
+        # For now, let's just print whatever they reply with
+        def check(m) -> bool:
+            return m.author == user
+        msg = await bot.wait_for('message', check=check)
+        print(f"Status update from {member.name}: {msg.content}")
+
 @bot.event
-async def on_ready():
-    print("Bot is online!")  # Print a message to the console
-    ping_for_status.start()  # Start the loop for pinging status updates
+async def on_ready() -> None:
+    print("Bot is online!")
+    
+    scheduler = Scheduler()
+    
+    # Read team member data from JSON file
+    with open("team_members.json", "r") as f:
+        team_members_data = json.load(f)
+    
+    for member_data in team_members_data:
+        member = TeamMember(
+            discord_id=member_data["discord_id"], 
+            time_zone=member_data["time_zone"], 
+            name=member_data["name"]
+        )
+        scheduler.add_job(send_status_request, member)
 
 # Run the bot
 bot.run(BOT_TOKEN)
