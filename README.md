@@ -23,9 +23,11 @@ This repository contains the code for a Discord bot designed to automate status 
 
 ### Environment Variables
 Create a `.env` file in the root of your project and add the following variables:
+```
 DISCORD_BOT_TOKEN=<Your Bot Token Here>
 DISCORD_GUILD_ID=<Your Guild (Server) ID Here>
 DISCORD_CHANNEL_ID=<Your Channel ID Here>
+```
 
 ### Installation
 1. Clone this repository.
