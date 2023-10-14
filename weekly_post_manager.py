@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta
+import json
 import pytz
 from typing import List
 from team_member import TeamMember
@@ -18,14 +19,57 @@ class WeeklyPostManager:
         self.team_members = team_members
         self.max_name_length = max([len(m.name) for m in team_members])
         self.editable_weekly_post = None
+        self.load_weekly_post_data()
+
+    def load_weekly_post_data(self):
+        """
+        Load the weekly post data from a JSON file.
+
+        This function reads the 'weekly_post_data.json' file to get the ID and timestamp of the last
+        weekly post. If the file does not exist, it sets the ID and timestamp to None.
+        """
+        try:
+            with open("weekly_post_data.json", "r") as f:
+                data = json.load(f)
+            self.editable_weekly_post_id = data.get('post_id', None)
+            self.weekly_post_timestamp = datetime.fromisoformat(data.get('timestamp', ''))
+        except FileNotFoundError:
+            self.editable_weekly_post_id = None
+            self.weekly_post_timestamp = None
+            # Create an empty weekly_post_data.json
+            with open("weekly_post_data.json", "w") as f:
+                json.dump({}, f)
+
+    def save_weekly_post_data(self):
+        """
+        Save the weekly post data to a JSON file.
+
+        This function writes the ID and timestamp of the current weekly post to the
+        'weekly_post_data.json' file.
+        """
+        data = {
+            'post_id': self.editable_weekly_post.id,
+            'timestamp': datetime.now().isoformat()
+        }
+        with open("weekly_post_data.json", "w") as f:
+            json.dump(data, f)
 
     async def initialize_post(self):
         """
-        Initializes the weekly status post on Discord.
+        Initializes or retrieves the weekly status post on Discord.
 
-        This function sends a new message in the Discord channel with the list
-        of team members and their statuses.
+        This function checks if a valid weekly post already exists for the current week.
+        If it does, it retrieves that post. Otherwise, it sends a new message in the Discord
+        channel with the list of team members and their statuses.
         """
+        current_week_number = datetime.now().isocalendar()[1]
+        saved_week_number = self.weekly_post_timestamp.isocalendar()[1] if self.weekly_post_timestamp else None
+
+        # Skip initialization if the post already exists and is for the current week
+        if self.editable_weekly_post_id and current_week_number == saved_week_number:
+            self.editable_weekly_post = await self.channel.fetch_message(self.editable_weekly_post_id)
+            return
+        
         utc_now = pytz.utc.localize(datetime.utcnow())
         today_weekday = utc_now.weekday()
         last_monday = utc_now - timedelta(days=today_weekday)
@@ -39,6 +83,8 @@ class WeeklyPostManager:
         await self.channel.send(f"# Weekly Status Updates")
         await self.channel.send(f"### {start_date} to {end_date}")
         self.editable_weekly_post = await self.channel.send(f"{member_list}")
+
+        self.save_weekly_post_data()  # Save the ID and timestamp after creating the post
 
     async def update_post(self, member: TeamMember, weekday: int):
         """
