@@ -28,7 +28,6 @@ bot = commands.Bot(command_prefix='!', intents=intents)
 db = StatusDB()
 
 team_member_manager = None
-weekly_post_manager = None
 
 # Define a loop that runs every 48 hours to ping for status updates
 @tasks.loop(hours=48)
@@ -39,7 +38,26 @@ async def ping_for_status() -> None:
     # Send a message to the channel to ping everyone for a status update
     await channel.send("Hey @everyone, time for a status update! Please share what you've been working on.")
 
-async def send_status_request(member: TeamMember) -> None:
+# Define a loop that runs every hour to check if a new weekly post should be created
+@tasks.loop(hours=1)
+async def check_weekly_post(weekly_post_manager: WeeklyPostManager, team_members: List[TeamMember]):
+    earliest_time_zone = None
+    earliest_time = None
+    
+    for member in team_members:
+        tz = pytz.timezone(member.time_zone)
+        local_time = datetime.now(tz)
+        
+        if local_time.weekday() == 0 and local_time.hour >= 9:
+            if earliest_time is None or local_time < earliest_time:
+                earliest_time = local_time
+                earliest_time_zone = member.time_zone
+                
+    if earliest_time is not None:
+        print(f"Initializing weekly post based on the earliest time zone: {earliest_time_zone}")
+        await weekly_post_manager.initialize_post()
+
+async def send_status_request(member: TeamMember, weekly_post_manager: WeeklyPostManager):
     user = bot.get_user(member.discord_id)
     if user:
         await user.send(f"Good morning {member.name}, time for your status update!")
@@ -61,33 +79,22 @@ async def send_status_request(member: TeamMember) -> None:
         await weekly_post_manager.update_post(member, weekday)
 
 @bot.event
-async def on_ready() -> None:
+async def on_ready():
     print("Bot is online!")  # Log that the bot is online
-    
-    # Initialize a job scheduler for sending status requests to team members
-    scheduler = Scheduler()
-    
+
     team_member_manager = TeamMemberManager("team_members.json")
-    # Use TeamMemberManager to load team members from the JSON file
     team_members = team_member_manager.load_team_members()
-    
-    # Get the Discord guild (server) and channel objects
+
     guild = bot.get_guild(GUILD_TOKEN)
     channel = guild.get_channel(CHANNEL_TOKEN)
     
-    # Schedule status request jobs for each team member
-    for member in team_members:
-        scheduler.add_job(send_status_request, member)
-
-    # Declare the global variable for the WeeklyPostManager
-    global weekly_post_manager
-    
-    # Initialize the WeeklyPostManager with the channel and team members
     weekly_post_manager = WeeklyPostManager(channel, team_members)
+    check_weekly_post.start(weekly_post_manager, team_members)
     
-    # Call the method to create the initial weekly post
-    await weekly_post_manager.initialize_post()
-
+    scheduler = Scheduler()
+    
+    for member in team_members:
+        scheduler.add_job(send_status_request, member, weekly_post_manager) 
 
 # Run the bot
 bot.run(BOT_TOKEN)
