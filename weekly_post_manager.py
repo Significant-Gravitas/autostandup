@@ -32,7 +32,7 @@ class WeeklyPostManager:
             with open("weekly_post_data.json", "r") as f:
                 data = json.load(f)
             self.editable_weekly_post_id = data.get('post_id', None)
-            self.weekly_post_timestamp = datetime.fromisoformat(data.get('timestamp', ''))
+            self.weekly_post_timestamp = datetime.fromisoformat(data.get('timestamp')) if data.get('timestamp') else None
         except FileNotFoundError:
             self.editable_weekly_post_id = None
             self.weekly_post_timestamp = None
