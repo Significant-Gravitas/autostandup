@@ -27,8 +27,6 @@ intents.members = True
 bot = commands.Bot(command_prefix='!', intents=intents)
 db = StatusDB()
 
-team_member_manager = None
-
 # Define a loop that runs every 48 hours to ping for status updates
 @tasks.loop(hours=48)
 async def ping_for_status() -> None:
