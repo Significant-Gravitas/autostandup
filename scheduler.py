@@ -23,5 +23,9 @@ class Scheduler:
             member: The TeamMember object for whom the job is added.
         """
         time_zone = pytz.timezone(member.time_zone)
-        trigger = CronTrigger(day_of_week='mon,tue,wed,thu,fri', hour=10, timezone=time_zone)
-        job = self.scheduler.add_job(func, trigger, args=[member])
+        
+        weekday_trigger = CronTrigger(day_of_week='mon,tue,wed,thu,fri', hour=10, timezone=time_zone)
+        self.scheduler.add_job(func, weekday_trigger, args=[member])
+        
+        weekend_trigger = CronTrigger(day_of_week='sat,sun', hour=11, timezone=time_zone)
+        self.scheduler.add_job(func, weekend_trigger, args=[member])
