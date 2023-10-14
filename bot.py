@@ -57,7 +57,7 @@ async def send_status_request(member: TeamMember) -> None:
         local_now = utc_now.astimezone(pytz.timezone(member.time_zone))
         weekday = local_now.weekday()
 
-        # Update the Discord post using PostManager
+        # Update the Discord post using WeeklyPostManager
         await weekly_post_manager.update_post(member, weekday)
 
 @bot.event

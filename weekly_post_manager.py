@@ -73,15 +73,15 @@ class WeeklyPostManager:
         utc_now = pytz.utc.localize(datetime.utcnow())
         today_weekday = utc_now.weekday()
         last_monday = utc_now - timedelta(days=today_weekday)
-        next_friday = last_monday + timedelta(days=4)
+        next_sunday = last_monday + timedelta(days=6)
 
         start_date = self.format_date(last_monday)
-        end_date = self.format_date(next_friday)
+        end_date = self.format_date(next_sunday)
 
-        member_list = '\n'.join([f"## `{m.name.ljust(self.max_name_length)} {'❌' * 5}`" for m in self.team_members])
+        member_list = '\n'.join([f"# `{m.name.ljust(self.max_name_length)} {'❓' * 5}`" for m in self.team_members])
 
         await self.channel.send(f"# Weekly Status Updates")
-        await self.channel.send(f"### {start_date} to {end_date}")
+        await self.channel.send(f"## {start_date} to {end_date}")
         self.editable_weekly_post = await self.channel.send(f"{member_list}")
 
         self.save_weekly_post_data()  # Save the ID and timestamp after creating the post
@@ -98,12 +98,17 @@ class WeeklyPostManager:
         name_index = self.editable_weekly_post.content.find(member.name)
         if name_index == -1:
             return  # Name not found, do nothing
-
+        
         start_index = name_index + self.max_name_length + 1  # Adding 1 for the space after the name
-        existing_line = self.editable_weekly_post.content[start_index:start_index + 5]  # 5 for the '❌' or '✅'
+        existing_line = self.editable_weekly_post.content[start_index:start_index + 5]  # 5 for the '❓' or '✅'
+
+        # Find the first question mark and replace it with a checkmark
+        first_question_mark = existing_line.find("❓")
+        if first_question_mark == -1:
+            return  # No question marks left, do nothing
 
         # Generate the new line for this member
-        new_line = existing_line[:weekday] + "✅" + existing_line[weekday + 1:]
+        new_line = existing_line[:first_question_mark] + "✅" + existing_line[first_question_mark + 1:]
 
         # Update the weekly post
         new_content = self.editable_weekly_post.content[:start_index] + new_line + self.editable_weekly_post.content[start_index + 5:]
