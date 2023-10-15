@@ -1,6 +1,5 @@
 # Import required modules
 import os
-import json
 from typing import List
 import pytz
 from discord.ext import commands, tasks
@@ -9,9 +8,13 @@ from dotenv import load_dotenv
 from scheduler import Scheduler
 from team_member import TeamMember
 from status_db import StatusDB
-from datetime import datetime, timedelta
+from datetime import datetime
 from weekly_post_manager import WeeklyPostManager
 from team_member_manager import TeamMemberManager
+from flask import Flask
+from multiprocessing import Process
+
+app = Flask(__name__)
 
 # Load environment variables from the .env file
 load_dotenv()
@@ -88,11 +91,30 @@ async def on_ready():
     
     weekly_post_manager = WeeklyPostManager(channel, team_members)
     check_weekly_post.start(weekly_post_manager, team_members)
+
+    await weekly_post_manager.initialize_post()
     
     scheduler = Scheduler()
     
     for member in team_members:
         scheduler.add_job(send_status_request, member, weekly_post_manager) 
 
-# Run the bot
-bot.run(BOT_TOKEN)
+@app.route('/')
+def index(): 
+    return 'Discord bot is running.'
+
+def run_bot():
+    bot.run(BOT_TOKEN)
+
+def run_app():
+    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 80)))
+
+if __name__ == '__main__':
+    p1 = Process(target=run_bot)
+    p2 = Process(target=run_app)
+
+    p1.start()
+    p2.start()
+
+    p1.join()
+    p2.join()
