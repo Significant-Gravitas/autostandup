@@ -59,6 +59,9 @@ async def check_weekly_post(weekly_post_manager: WeeklyPostManager, team_members
         await weekly_post_manager.initialize_post()
 
 async def send_status_request(member: TeamMember, weekly_post_manager: WeeklyPostManager):
+    if weekly_post_manager.has_all_checkmarks(member):
+        return  # If all checkmarks are present, do nothing
+
     user = bot.get_user(member.discord_id)
     if user:
         await user.send(f"Good morning {member.name}, time for your status update!")

@@ -114,6 +114,25 @@ class WeeklyPostManager:
         new_content = self.editable_weekly_post.content[:start_index] + new_line + self.editable_weekly_post.content[start_index + 5:]
         await self.editable_weekly_post.edit(content=new_content)
 
+    def has_all_checkmarks(self, member: TeamMember) -> bool:
+        """
+        Checks if a team member has all checkmarks (✅) in their status.
+
+        Args:
+            member: The TeamMember object to check.
+
+        Returns:
+            True if all checkmarks are present, False otherwise.
+        """
+        name_index = self.editable_weekly_post.content.find(member.name)
+        if name_index == -1:
+            return False  # Name not found, do nothing
+
+        start_index = name_index + self.max_name_length + 1
+        existing_line = self.editable_weekly_post.content[start_index:start_index + 5]
+        
+        return all([char == "✅" for char in existing_line])
+
 
     def format_date(self, dt: datetime) -> str:
         """
