@@ -22,6 +22,7 @@ class StatusDB:
                 discord_id INTEGER NOT NULL,
                 name TEXT NOT NULL,
                 status TEXT NOT NULL,
+                streak INTEGER DEFAULT 0,
                 timestamp TEXT DEFAULT CURRENT_TIMESTAMP
             );
         ''')
@@ -49,6 +50,19 @@ class StatusDB:
         c = self.conn.cursor()
         c.execute("SELECT discord_id, name, status, timestamp FROM updates")
         return c.fetchall()
+    
+    def update_streak(self, discord_id: int, new_streak: int):
+        """Updates the streak for a given user."""
+        c = self.conn.cursor()
+        c.execute("UPDATE updates SET streak = ? WHERE discord_id = ?", (new_streak, discord_id))
+        self.conn.commit()
+
+    def get_streak(self, discord_id: int) -> int:
+        """Fetches the current streak for a given user."""
+        c = self.conn.cursor()
+        c.execute("SELECT streak FROM updates WHERE discord_id = ?", (discord_id,))
+        row = c.fetchone()
+        return row[0] if row else 0
 
     def close(self):
         """Closes the SQLite database connection."""

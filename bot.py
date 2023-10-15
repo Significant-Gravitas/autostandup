@@ -56,6 +56,11 @@ async def check_weekly_post(weekly_post_manager: WeeklyPostManager, team_members
                 
     if earliest_time is not None:
         print(f"Initializing weekly post based on the earliest time zone: {earliest_time_zone}")
+
+        # Reset streaks for the previous week
+        weekly_post_manager.reset_streaks(db)
+        
+        # Initialize new weekly post
         await weekly_post_manager.initialize_post()
 
 async def send_status_request(member: TeamMember, weekly_post_manager: WeeklyPostManager):
@@ -81,6 +86,9 @@ async def send_status_request(member: TeamMember, weekly_post_manager: WeeklyPos
 
         # Update the Discord post using WeeklyPostManager
         await weekly_post_manager.update_post(member, weekday)
+
+        # Update the streak for this member
+        weekly_post_manager.update_streak(member, db)
 
 @bot.event
 async def on_ready():

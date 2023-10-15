@@ -2,6 +2,7 @@ from datetime import datetime, timedelta
 import json
 import pytz
 from typing import List
+from status_db import StatusDB
 from team_member import TeamMember
 
 class WeeklyPostManager:
@@ -133,7 +134,6 @@ class WeeklyPostManager:
         
         return all([char == "✅" for char in existing_line])
 
-
     def format_date(self, dt: datetime) -> str:
         """
         Formats a datetime object into a human-readable string.
@@ -152,3 +152,65 @@ class WeeklyPostManager:
             suffix_index = day % 10  # use 'st', 'nd', 'rd' as appropriate
 
         return dt.strftime(f"%B {day}{suffix[suffix_index]}")
+    
+    # TODO: Create a streak manager
+    def update_streak(self, member: TeamMember, db: StatusDB) -> None:
+        """
+        Updates the streak count for a specific team member.
+
+        This method fetches the current streak count for the member from the database,
+        increments it by 1, and then updates the new streak back into the database.
+
+        Args:
+            member (TeamMember): The TeamMember object whose streak needs to be updated.
+            db (StatusDB): The StatusDB object for interacting with the database.
+
+        Returns:
+            None
+        """
+        existing_streak = db.get_streak(member.discord_id)
+        new_streak = existing_streak + 1
+        db.update_streak(member.discord_id, new_streak)
+
+    def reset_streaks(self, db: StatusDB) -> None:
+        """
+        Resets the streaks for all team members who have fewer than 5 checkmarks.
+
+        This method iterates over all team members and checks if each member has
+        at least 5 checkmarks for the current week. If not, their streak is reset
+        to zero in the database.
+
+        Args:
+            db (StatusDB): The StatusDB object for interacting with the database.
+
+        Returns:
+            None
+        """
+        for member in self.team_members:
+            if not self.has_minimum_checkmarks(member, 5):
+                db.update_streak(member.discord_id, 0)
+
+    def has_minimum_checkmarks(self, member: TeamMember, n: int) -> bool:
+        """
+        Checks if a team member has at least n checkmarks (✅) in their status.
+
+        This method scans the status line for the given team member in the weekly
+        Discord post and counts the number of checkmarks. It returns True if the
+        count is at least n, otherwise False.
+
+        Args:
+            member (TeamMember): The TeamMember object to check.
+            n (int): The minimum number of checkmarks required.
+
+        Returns:
+            bool: True if at least n checkmarks are present, False otherwise.
+        """
+        name_index = self.editable_weekly_post.content.find(member.name)
+        if name_index == -1:
+            return False  # Name not found, do nothing
+
+        start_index = name_index + self.max_name_length + 1
+        existing_line = self.editable_weekly_post.content[start_index:start_index + 5]
+
+        return existing_line.count("✅") >= n
+
