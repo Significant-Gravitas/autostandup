@@ -133,7 +133,7 @@ async def remove_user(ctx, discord_id: int):
         team_member_manager.remove_member(discord_id)
         
         # Update the weekly post to remove the member
-        await weekly_post_manager.remove_member_from_post(member_to_remove)
+        await weekly_post_manager.remove_member_from_post(member_to_remove, db)
         
         await ctx.send(f"User with Discord ID {discord_id} removed successfully.")
     else:
@@ -168,7 +168,7 @@ async def on_ready():
     weekly_post_manager = WeeklyPostManager(channel, team_members)
     # Initialize new weekly post
     await weekly_post_manager.initialize_post(db)
-    
+
     check_weekly_post.start(weekly_post_manager, team_members)
     scheduler = Scheduler()
     

@@ -231,43 +231,104 @@ class WeeklyPostManager:
 
         return existing_line.count("✅") >= n
 
-    async def add_member_to_post(self, member: TeamMember, db: StatusDB):
-        """Adds a new member to the editable weekly post."""
-        # Update the team_members list
-        self.team_members.append(member)
-        # Recalculate the maximum name length
-        self.max_name_length = max([len(m.name) for m in self.team_members])
+    async def rebuild_post(self, db: StatusDB):
+        """
+        Rebuilds the weekly status post with updated team members and alignment.
 
-        streak = db.get_streak(member.discord_id)
-        day_suffix = "day" if streak == 1 else "days"
-        new_line = f"# `{member.name.ljust(self.max_name_length)} {'❓' * 5} (Streak: {streak} {day_suffix})`"
+        This function regenerates the entire status post to make sure the alignment and check marks
+        are correctly displayed for each team member. It also handles edge cases like adding the first
+        member and removing the last one.
 
-        if self.editable_weekly_post is not None:
-            new_content = f"{self.editable_weekly_post.content}\n{new_line}"
-            self.editable_weekly_post = await self.editable_weekly_post.edit(content=new_content)
-        else:
-            self.editable_weekly_post = await self.channel.send(f"{new_line}")
+        Args:
+            db (StatusDB): The StatusDB object for interacting with the database.
+
+        Returns:
+            None
+        """
+        # If there are team members but no editable post yet, create one for the first member
+        if self.team_members and self.editable_weekly_post is None:
+            first_member = self.team_members[0]
+            streak = db.get_streak(first_member.discord_id)
+            day_suffix = "day" if streak == 1 else "days"
+            initial_content = f"# `{first_member.name.ljust(self.max_name_length)} {'❓' * 5} (Streak: {streak} {day_suffix})`"
+            self.editable_weekly_post = await self.channel.send(initial_content)
             self.save_weekly_post_data()
+            return
 
-    async def remove_member_from_post(self, member: TeamMember):
-        """Removes a member from the editable weekly post."""
-        # Update the team_members list
-        self.team_members = [m for m in self.team_members if m.discord_id != member.discord_id]
-        # Recalculate the maximum name length
-        self.max_name_length = max([len(m.name) for m in self.team_members]) if self.team_members else 0
-
-        lines = self.editable_weekly_post.content.split('\n')
-        line_to_remove = next((line for line in lines if member.name in line), None)
-
-        if line_to_remove:
-            lines.remove(line_to_remove)
-            new_content = '\n'.join(lines)
-
-            # Check if the new_content is empty or not
-            if new_content.strip():
-                self.editable_weekly_post = await self.editable_weekly_post.edit(content=new_content)
-            else:
-                # Delete the post or replace with a placeholder message
+        # If no team members are left, delete the post and return
+        if not self.team_members:
+            if self.editable_weekly_post:
                 await self.editable_weekly_post.delete()
-                # Optionally, set editable_weekly_post to None if you delete it
-                self.editable_weekly_post = None
+            self.editable_weekly_post = None
+            return
+        
+        member_list = []
+        for m in self.team_members:
+            # Extract the line related to this member
+            lines = self.editable_weekly_post.content.split('\n')
+            member_line = next((line for line in lines if m.name in line), None)
+            
+            # Default to five question marks
+            existing_marks = "❓❓❓❓❓"
+
+            if member_line:
+                first_checkmark = member_line.find("✅")
+                first_question_mark = member_line.find("❓")
+                
+                # Look for existing checkmarks
+                if first_checkmark != -1:
+                    existing_marks = member_line[first_checkmark:first_checkmark + 5]
+                
+                # If no checkmarks, look for existing question marks
+                elif first_question_mark != -1:
+                    existing_marks = member_line[first_question_mark:first_question_mark + 5]
+            
+            # Fetch the streak from the database
+            streak = db.get_streak(m.discord_id)
+            day_suffix = "day" if streak == 1 else "days"
+            
+            # Create the new line for the member
+            new_line = f"# `{m.name.ljust(self.max_name_length)} {existing_marks} (Streak: {streak} {day_suffix})`"
+            member_list.append(new_line)
+        
+        # Combine the lines into a single string
+        new_content = '\n'.join(member_list)
+
+        self.editable_weekly_post = await self.editable_weekly_post.edit(content=new_content)
+
+    async def add_member_to_post(self, member: TeamMember, db: StatusDB):
+        """
+        Adds a new member to the editable weekly post and rebuilds it.
+
+        Args:
+            member (TeamMember): The new member to be added.
+            db (StatusDB): The StatusDB object for interacting with the database.
+
+        Returns:
+            None
+        """
+        # Add the new member and update max_name_length
+        self.team_members.append(member)
+        self.max_name_length = max([len(m.name) for m in self.team_members])
+        
+        # Rebuild the post to reflect the changes
+        await self.rebuild_post(db)
+
+    async def remove_member_from_post(self, member: TeamMember, db: StatusDB):
+        """
+        Removes a member from the editable weekly post and rebuilds it.
+
+        Args:
+            member (TeamMember): The member to be removed.
+            db (StatusDB): The StatusDB object for interacting with the database.
+
+        Returns:
+            None
+        """
+        # Remove the member and update max_name_length
+        self.team_members = [m for m in self.team_members if m.discord_id != member.discord_id]
+        self.max_name_length = max([len(m.name) for m in self.team_members]) if self.team_members else 0
+        
+        # Rebuild the post to reflect the changes
+        await self.rebuild_post(db)
+
