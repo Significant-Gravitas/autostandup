@@ -1,3 +1,4 @@
+import datetime
 import mysql.connector
 from typing import List, Tuple
 
@@ -42,6 +43,14 @@ class StatusDB:
                 discord_id BIGINT PRIMARY KEY,
                 current_streak INT DEFAULT 0,
                 FOREIGN KEY (discord_id) REFERENCES team_members(discord_id)
+            );
+        ''')
+
+        # Create Weekly Posts Table
+        c.execute('''
+            CREATE TABLE IF NOT EXISTS weekly_posts (
+                post_id BIGINT PRIMARY KEY,
+                timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
         ''')
         
@@ -102,3 +111,19 @@ class StatusDB:
         c = self.conn.cursor()
         c.execute("SELECT discord_id, name, time_zone FROM team_members")
         return c.fetchall()
+
+    def get_weekly_post_data(self):
+        c = self.conn.cursor()
+        c.execute("SELECT post_id, timestamp FROM weekly_posts LIMIT 1")
+        row = c.fetchone()
+        return {'post_id': row[0], 'timestamp': row[1]} if row else {}
+
+    def save_weekly_post_data(self, post_id: int, timestamp: datetime):
+        c = self.conn.cursor()
+        c.execute("""
+            INSERT INTO weekly_posts (post_id, timestamp)
+            VALUES (%s, %s)
+            ON DUPLICATE KEY UPDATE timestamp = %s
+        """, (post_id, timestamp, timestamp))
+        self.conn.commit()
+

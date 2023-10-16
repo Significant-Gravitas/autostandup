@@ -167,7 +167,7 @@ async def on_ready():
 
     global weekly_post_manager
     
-    weekly_post_manager = WeeklyPostManager(channel, team_members)
+    weekly_post_manager = WeeklyPostManager(channel, team_members, db)
     # Initialize new weekly post
     await weekly_post_manager.initialize_post(db)
 

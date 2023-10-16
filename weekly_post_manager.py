@@ -1,5 +1,4 @@
 from datetime import datetime, timedelta
-import json
 import pytz
 from typing import List
 from status_db import StatusDB
@@ -8,7 +7,7 @@ from team_member import TeamMember
 class WeeklyPostManager:
     """Manages the status post in a Discord channel."""
     
-    def __init__(self, channel, team_members: List[TeamMember]):
+    def __init__(self, channel, team_members: List[TeamMember], db: StatusDB):
         """
         Initializes a new WeeklyPostManager instance.
 
@@ -18,43 +17,36 @@ class WeeklyPostManager:
         """
         self.channel = channel
         self.team_members = team_members
+        self.db = db
         self.max_name_length = max((len(m.name) for m in team_members), default=0)
         self.editable_weekly_post = None
         self.load_weekly_post_data()
 
     def load_weekly_post_data(self):
         """
-        Load the weekly post data from a JSON file.
-
-        This function reads the 'weekly_post_data.json' file to get the ID and timestamp of the last
-        weekly post. If the file does not exist, it sets the ID and timestamp to None.
+        Load the weekly post data from the database.
+        
+        This method queries the 'weekly_posts' table to get the ID and timestamp of 
+        the last weekly post. If no data exists, it sets the ID and timestamp to None.
+        
+        Args:
+            db (StatusDB): The StatusDB object for interacting with the database.
         """
-        try:
-            # TODO: Use a database instead of a JSON
-            with open("weekly_post_data.json", "r") as f:
-                data = json.load(f)
-            self.editable_weekly_post_id = data.get('post_id', None)
-            self.weekly_post_timestamp = datetime.fromisoformat(data.get('timestamp')) if data.get('timestamp') else None
-        except FileNotFoundError:
-            self.editable_weekly_post_id = None
-            self.weekly_post_timestamp = None
-            # Create an empty weekly_post_data.json
-            with open("weekly_post_data.json", "w") as f:
-                json.dump({}, f)
+        data = self.db.get_weekly_post_data()
+        self.editable_weekly_post_id = data.get('post_id', None)
+        self.weekly_post_timestamp = data.get('timestamp', None)
 
     def save_weekly_post_data(self):
         """
-        Save the weekly post data to a JSON file.
-
-        This function writes the ID and timestamp of the current weekly post to the
-        'weekly_post_data.json' file.
+        Save the weekly post data to the database.
+        
+        This method inserts or updates the ID and timestamp of the current weekly post 
+        in the 'weekly_posts' table.
+        
+        Args:
+            db (StatusDB): The StatusDB object for interacting with the database.
         """
-        data = {
-            'post_id': self.editable_weekly_post.id,
-            'timestamp': datetime.now().isoformat()
-        }
-        with open("weekly_post_data.json", "w") as f:
-            json.dump(data, f)
+        self.db.save_weekly_post_data(self.editable_weekly_post.id, datetime.now())
 
     async def initialize_post(self, db: StatusDB):
         """
