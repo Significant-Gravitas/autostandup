@@ -84,9 +84,11 @@ async def send_status_request(member: TeamMember, weekly_post_manager: WeeklyPos
     user = bot.get_user(member.discord_id)
     if user:
         await user.send(
-            f"Good morning {member.name}, time for your status update! "
-            f"Please send a single message for your update as we're only listening for the first message you send back. "
-            f"(Note: Multi-message updates are coming soon!)"
+            f"Good morning {member.name}, time for your daily status update!\n"
+            f"Please include in a single message:\n"
+            f"What you accomplished yesterday.\n"
+            f"What you plan to work on today.\n"
+            f"(Note: We're currently only processing the first message you send back. Multi-message updates are coming soon!)"
         )
 
         def check(m) -> bool:
