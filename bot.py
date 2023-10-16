@@ -39,8 +39,8 @@ async def ping_for_status() -> None:
     # Send a message to the channel to ping everyone for a status update
     await channel.send("Hey @everyone, time for a status update! Please share what you've been working on.")
 
-# Define a loop that runs every hour to check if a new weekly post should be created
-@tasks.loop(hours=1)
+# Define a loop that runs every 30 minutes to check if a new weekly post should be created
+@tasks.loop(minutes=30)
 async def check_weekly_post(weekly_post_manager: WeeklyPostManager, team_members: List[TeamMember]):
     earliest_time_zone = None
     earliest_time = None
