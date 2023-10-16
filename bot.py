@@ -73,7 +73,11 @@ async def send_status_request(member: TeamMember, weekly_post_manager: WeeklyPos
 
     user = bot.get_user(member.discord_id)
     if user:
-        await user.send(f"Good morning {member.name}, time for your status update!")
+        await user.send(
+            f"Good morning {member.name}, time for your status update! "
+            f"Please send a single message for your update as we're only listening for the first message you send back. "
+            f"(Note: Multi-message updates are coming soon!)"
+        )
 
         def check(m) -> bool:
             return m.author == user
