@@ -61,7 +61,7 @@ async def check_weekly_post(weekly_post_manager: WeeklyPostManager, team_members
         weekly_post_manager.reset_streaks(db)
         
         # Initialize new weekly post
-        await weekly_post_manager.initialize_post()
+        await weekly_post_manager.initialize_post(db)
 
 async def send_status_request(member: TeamMember, weekly_post_manager: WeeklyPostManager):
     if weekly_post_manager.has_all_checkmarks(member):
@@ -79,16 +79,11 @@ async def send_status_request(member: TeamMember, weekly_post_manager: WeeklyPos
         # Insert the status update into the database
         db.insert_status(member.discord_id, member.name, msg.content)
 
-        # Determine which weekday it is in the member's local time zone
-        utc_now = pytz.utc.localize(datetime.utcnow())
-        local_now = utc_now.astimezone(pytz.timezone(member.time_zone))
-        weekday = local_now.weekday()
-
-        # Update the Discord post using WeeklyPostManager
-        await weekly_post_manager.update_post(member, weekday)
-
         # Update the streak for this member
         weekly_post_manager.update_streak(member, db)
+
+        # Update the Discord post using WeeklyPostManager
+        await weekly_post_manager.update_post(member, db)
 
 @bot.event
 async def on_ready():
@@ -102,8 +97,6 @@ async def on_ready():
     
     weekly_post_manager = WeeklyPostManager(channel, team_members)
     check_weekly_post.start(weekly_post_manager, team_members)
-
-    await weekly_post_manager.initialize_post()
     
     scheduler = Scheduler()
     

@@ -55,7 +55,7 @@ class WeeklyPostManager:
         with open("weekly_post_data.json", "w") as f:
             json.dump(data, f)
 
-    async def initialize_post(self):
+    async def initialize_post(self, db: StatusDB):
         """
         Initializes or retrieves the weekly status post on Discord.
 
@@ -79,41 +79,56 @@ class WeeklyPostManager:
         start_date = self.format_date(last_monday)
         end_date = self.format_date(next_sunday)
 
-        member_list = '\n'.join([f"# `{m.name.ljust(self.max_name_length)} {'❓' * 5}`" for m in self.team_members])
+        # Add streaks to the member list
+        member_list = []
+        for m in self.team_members:
+            streak = db.get_streak(m.discord_id)  # Fetch the streak from the database
+            day_suffix = "day" if streak == 1 else "days"  # Choose the appropriate suffix
+            member_list.append(f"# `{m.name.ljust(self.max_name_length)} {'❓' * 5} (Streak: {streak} {day_suffix})`")
+
+        member_list_str = '\n'.join(member_list)
 
         await self.channel.send(f"# Weekly Status Updates")
         await self.channel.send(f"## {start_date} to {end_date}")
-        self.editable_weekly_post = await self.channel.send(f"{member_list}")
+        self.editable_weekly_post = await self.channel.send(f"{member_list_str}")
 
         self.save_weekly_post_data()  # Save the ID and timestamp after creating the post
 
-    async def update_post(self, member: TeamMember, weekday: int):
-        """
-        Updates a specific line in the weekly status post.
+    async def update_post(self, member: TeamMember, db: StatusDB):
+        # Split the content into lines and find the line related to this member
+        lines = self.editable_weekly_post.content.split('\n')
+        line_to_edit = next((line for line in lines if member.name in line), None)
 
-        Args:
-            member: The TeamMember object whose status needs updating.
-            weekday: The weekday index (0 for Monday, 1 for Tuesday, etc.)
-        """
-        # Fetch the current line for this member from the weekly post
-        name_index = self.editable_weekly_post.content.find(member.name)
-        if name_index == -1:
+        if line_to_edit is None:
             return  # Name not found, do nothing
         
-        start_index = name_index + self.max_name_length + 1  # Adding 1 for the space after the name
-        existing_line = self.editable_weekly_post.content[start_index:start_index + 5]  # 5 for the '❓' or '✅'
+        # Remove the '#' and trim spaces
+        line_to_edit = line_to_edit.replace("#", "").strip()
 
-        # Find the first question mark and replace it with a checkmark
-        first_question_mark = existing_line.find("❓")
+        # Extract the checkmarks/question marks and streak information
+        name_end = line_to_edit.find(' ')
+        marks_streak = line_to_edit[name_end:].strip()
+
+        # Update the first question mark to a checkmark
+        first_question_mark = marks_streak.find("❓")
         if first_question_mark == -1:
             return  # No question marks left, do nothing
 
-        # Generate the new line for this member
-        new_line = existing_line[:first_question_mark] + "✅" + existing_line[first_question_mark + 1:]
+        new_marks_streak = marks_streak[:first_question_mark] + "✅" + marks_streak[first_question_mark + 1:]
+
+        # Update the streak count
+        new_streak = db.get_streak(member.discord_id)
+        new_streak_str = f"(Streak: {new_streak} {'day' if new_streak == 1 else 'days'})"
+
+        # Reconstruct the new line for this member
+        new_line = f"`{member.name.ljust(self.max_name_length)} {new_marks_streak.split('(')[0].strip()} {new_streak_str}`"
+
+        # Replace the old line with the new line in the content
+        new_content = self.editable_weekly_post.content.replace(line_to_edit, new_line)
 
         # Update the weekly post
-        new_content = self.editable_weekly_post.content[:start_index] + new_line + self.editable_weekly_post.content[start_index + 5:]
-        await self.editable_weekly_post.edit(content=new_content)
+        self.editable_weekly_post = await self.editable_weekly_post.edit(content=new_content)
+
 
     def has_all_checkmarks(self, member: TeamMember) -> bool:
         """
