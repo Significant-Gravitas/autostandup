@@ -1,36 +1,35 @@
-import json
 from typing import List
 from team_member import TeamMember
+from status_db import StatusDB
 
 class TeamMemberManager:
     """
     Manages operations related to team members.
     """
 
-    def __init__(self, team_members_json_path: str):
+    def __init__(self, db: StatusDB):
         """
         Initialize a TeamMemberManager object.
 
-        :param team_members_json_path: Path to the JSON file containing team member data.
+        :param db: StatusDB object for interacting with the database.
         """
-        self.team_members_json_path = team_members_json_path
+        self.db = db
         self.team_members = self.load_team_members()
 
     def load_team_members(self) -> List[TeamMember]:
         """
-        Load team members from a JSON file into a list of TeamMember objects.
+        Load team members from the SQLite database into a list of TeamMember objects.
 
         :return: List of TeamMember objects.
         """
         team_members = []
-        with open(self.team_members_json_path, "r") as f:
-            team_members_data = json.load(f)
+        members_data = self.db.list_all_members()
 
-        for member_data in team_members_data:
+        for member_data in members_data:
             member = TeamMember(
-                discord_id=member_data["discord_id"],
-                time_zone=member_data["time_zone"],
-                name=member_data["name"]
+                discord_id=member_data[0],
+                time_zone=member_data[2],
+                name=member_data[1]
             )
             team_members.append(member)
 
@@ -47,3 +46,24 @@ class TeamMemberManager:
             if member.discord_id == discord_id:
                 return member
         return None
+
+    def add_member(self, discord_id: int, name: str, time_zone: str):
+        """
+        Add a new team member to the list and the database.
+
+        :param discord_id: The Discord ID of the new member.
+        :param name: The name of the new member.
+        :param time_zone: The time zone of the new member.
+        """
+        new_member = TeamMember(discord_id, time_zone, name)
+        self.db.insert_new_member(discord_id, name, time_zone)
+        self.team_members.append(new_member)
+
+    def remove_member(self, discord_id: int):
+        """
+        Remove a team member from the list and the database.
+
+        :param discord_id: The Discord ID of the member to remove.
+        """
+        self.db.remove_member(discord_id)
+        self.team_members = [member for member in self.team_members if member.discord_id != discord_id]

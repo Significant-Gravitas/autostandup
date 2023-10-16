@@ -26,6 +26,16 @@ class StatusDB:
                 timestamp TEXT DEFAULT CURRENT_TIMESTAMP
             );
         ''')
+
+        # Create team_members table
+        c.execute('''
+            CREATE TABLE IF NOT EXISTS team_members (
+                discord_id INTEGER PRIMARY KEY,
+                name TEXT NOT NULL,
+                time_zone TEXT NOT NULL
+            );
+        ''')
+
         self.conn.commit()
 
     def insert_status(self, discord_id: int, name: str, status: str):
@@ -67,3 +77,35 @@ class StatusDB:
     def close(self):
         """Closes the SQLite database connection."""
         self.conn.close()
+
+    def insert_new_member(self, discord_id: int, name: str, time_zone: str):
+        """Inserts a new team member into the 'team_members' table."""
+        try:
+            c = self.conn.cursor()
+            c.execute("INSERT OR REPLACE INTO team_members (discord_id, name, time_zone) VALUES (?, ?, ?)",
+                    (discord_id, name, time_zone))
+            self.conn.commit()
+        except sqlite3.Error as e:
+            print(f"Database error: {e}")
+
+    def remove_member(self, discord_id: int):
+        """Removes a team member from the 'team_members' table."""
+        try:
+            c = self.conn.cursor()
+            c.execute("DELETE FROM team_members WHERE discord_id = ?", (discord_id,))
+            self.conn.commit()
+        except sqlite3.Error as e:
+            print(f"Database error: {e}")
+
+    def list_all_members(self) -> List[Tuple[int, str, str]]:
+        """Fetches all team members from the 'team_members' table.
+
+        Returns:
+            A list of tuples containing Discord ID, name, and time_zone.
+        """
+        try:
+            c = self.conn.cursor()
+            c.execute("SELECT discord_id, name, time_zone FROM team_members")
+            return c.fetchall()
+        except sqlite3.Error as e:
+            print(f"Database error: {e}")

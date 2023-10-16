@@ -3,7 +3,7 @@ import os
 from typing import List
 import pytz
 from discord.ext import commands, tasks
-from discord import Intents
+from discord import Intents, DMChannel
 from dotenv import load_dotenv
 from scheduler import Scheduler
 from team_member import TeamMember
@@ -23,12 +23,16 @@ load_dotenv()
 BOT_TOKEN = os.getenv('DISCORD_BOT_TOKEN')
 GUILD_TOKEN = int(os.getenv('DISCORD_GUILD_TOKEN'))
 CHANNEL_TOKEN = int(os.getenv('DISCORD_CHANNEL_TOKEN'))
+ADMIN_DISCORD_ID = int(os.getenv('ADMIN_DISCORD_ID'))
 
 # Initialize bot with default intents
 intents = Intents.default()
 intents.members = True
 bot = commands.Bot(command_prefix='!', intents=intents)
+# TODO: Remove these globals
 db = StatusDB()
+weekly_post_manager = None
+team_member_manager = None
 
 # Define a loop that runs every 48 hours to ping for status updates
 @tasks.loop(hours=48)
@@ -85,18 +89,73 @@ async def send_status_request(member: TeamMember, weekly_post_manager: WeeklyPos
         # Update the Discord post using WeeklyPostManager
         await weekly_post_manager.update_post(member, db)
 
+@bot.command(name='adduser')
+async def add_user(ctx, discord_id: int, time_zone: str, name: str):
+    if ctx.message.author.id != ADMIN_DISCORD_ID or not isinstance(ctx.channel, DMChannel):
+        await ctx.send("You're not authorized to add users.")
+        return
+    
+    # Add the new member using team_member_manager
+    team_member_manager.add_member(discord_id, name, time_zone)
+    
+    # Update the weekly post to include the new member
+    new_member = team_member_manager.find_member(discord_id)
+    if new_member:
+        await weekly_post_manager.add_member_to_post(new_member, db)
+    
+    await ctx.send(f"User {name} added successfully.")
+
+@bot.command(name='removeuser')
+async def remove_user(ctx, discord_id: int):
+    if ctx.message.author.id != ADMIN_DISCORD_ID or not isinstance(ctx.channel, DMChannel):
+        await ctx.send("You're not authorized to remove users.")
+        return
+
+    # Find the member object
+    member_to_remove = team_member_manager.find_member(discord_id)
+
+    if member_to_remove:
+        # Remove the member from the database
+        team_member_manager.remove_member(discord_id)
+        
+        # Update the weekly post to remove the member
+        await weekly_post_manager.remove_member_from_post(member_to_remove)
+        
+        await ctx.send(f"User with Discord ID {discord_id} removed successfully.")
+    else:
+        await ctx.send(f"No user with Discord ID {discord_id} found.")
+
+@bot.command(name='listusers')
+async def list_users(ctx):
+    if ctx.message.author.id != ADMIN_DISCORD_ID or not isinstance(ctx.channel, DMChannel):
+        await ctx.send("You're not authorized to list users.")
+        return
+
+    # List users using team_member_manager
+    users = [(member.discord_id, member.name, member.time_zone) for member in team_member_manager.team_members]
+    user_list = '\n'.join([f"Name: {user[1]}, Discord ID: {user[0]}, Time Zone: {user[2]}" for user in users])
+
+    await ctx.send(f"List of users:\n{user_list}")
+
 @bot.event
 async def on_ready():
     print("Bot is online!")  # Log that the bot is online
 
-    team_member_manager = TeamMemberManager("team_members.json")
+    global team_member_manager
+
+    team_member_manager = TeamMemberManager(db)
     team_members = team_member_manager.load_team_members()
 
     guild = bot.get_guild(GUILD_TOKEN)
     channel = guild.get_channel(CHANNEL_TOKEN)
+
+    global weekly_post_manager
     
     weekly_post_manager = WeeklyPostManager(channel, team_members)
     check_weekly_post.start(weekly_post_manager, team_members)
+
+    # Initialize new weekly post
+    await weekly_post_manager.initialize_post(db)
     
     scheduler = Scheduler()
     

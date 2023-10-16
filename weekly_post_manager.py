@@ -18,7 +18,7 @@ class WeeklyPostManager:
         """
         self.channel = channel
         self.team_members = team_members
-        self.max_name_length = max([len(m.name) for m in team_members])
+        self.max_name_length = max((len(m.name) for m in team_members), default=0)
         self.editable_weekly_post = None
         self.load_weekly_post_data()
 
@@ -90,9 +90,10 @@ class WeeklyPostManager:
 
         await self.channel.send(f"# Weekly Status Updates")
         await self.channel.send(f"## {start_date} to {end_date}")
-        self.editable_weekly_post = await self.channel.send(f"{member_list_str}")
+        if member_list_str:
+            self.editable_weekly_post = await self.channel.send(f"{member_list_str}")
+            self.save_weekly_post_data()  # Save the ID and timestamp after creating the post
 
-        self.save_weekly_post_data()  # Save the ID and timestamp after creating the post
 
     async def update_post(self, member: TeamMember, db: StatusDB):
         # Split the content into lines and find the line related to this member
@@ -229,3 +230,43 @@ class WeeklyPostManager:
 
         return existing_line.count("✅") >= n
 
+    async def add_member_to_post(self, member: TeamMember, db: StatusDB):
+        """Adds a new member to the editable weekly post."""
+        # Update the team_members list
+        self.team_members.append(member)
+        # Recalculate the maximum name length
+        self.max_name_length = max([len(m.name) for m in self.team_members])
+
+        streak = db.get_streak(member.discord_id)
+        day_suffix = "day" if streak == 1 else "days"
+        new_line = f"# `{member.name.ljust(self.max_name_length)} {'❓' * 5} (Streak: {streak} {day_suffix})`"
+
+        if self.editable_weekly_post is not None:
+            new_content = f"{self.editable_weekly_post.content}\n{new_line}"
+            self.editable_weekly_post = await self.editable_weekly_post.edit(content=new_content)
+        else:
+            self.editable_weekly_post = await self.channel.send(f"{new_line}")
+            self.save_weekly_post_data()
+
+    async def remove_member_from_post(self, member: TeamMember):
+        """Removes a member from the editable weekly post."""
+        # Update the team_members list
+        self.team_members = [m for m in self.team_members if m.discord_id != member.discord_id]
+        # Recalculate the maximum name length
+        self.max_name_length = max([len(m.name) for m in self.team_members]) if self.team_members else 0
+
+        lines = self.editable_weekly_post.content.split('\n')
+        line_to_remove = next((line for line in lines if member.name in line), None)
+
+        if line_to_remove:
+            lines.remove(line_to_remove)
+            new_content = '\n'.join(lines)
+
+            # Check if the new_content is empty or not
+            if new_content.strip():
+                self.editable_weekly_post = await self.editable_weekly_post.edit(content=new_content)
+            else:
+                # Delete the post or replace with a placeholder message
+                await self.editable_weekly_post.delete()
+                # Optionally, set editable_weekly_post to None if you delete it
+                self.editable_weekly_post = None
