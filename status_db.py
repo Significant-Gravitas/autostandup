@@ -1,23 +1,25 @@
 import mysql.connector
 from typing import List, Tuple
 
+# TODO: Break this into different databases
 class StatusDB:
-    def __init__(self, host, user, password, database):
+    def __init__(self, host, user, password, database, port):
         self.conn = mysql.connector.connect(
             host=host,
             user=user,
             password=password,
-            database=database
+            database=database,
+            port=port
         )
         self._create_tables()
 
     def _create_tables(self):
         c = self.conn.cursor()
         
-        # Create Users Table
+        # Create team_members Table
         c.execute('''
-            CREATE TABLE IF NOT EXISTS users (
-                discord_id INT PRIMARY KEY,
+            CREATE TABLE IF NOT EXISTS team_members (
+                discord_id BIGINT PRIMARY KEY,
                 name VARCHAR(255) NOT NULL,
                 time_zone VARCHAR(50) NOT NULL
             );
@@ -27,32 +29,32 @@ class StatusDB:
         c.execute('''
             CREATE TABLE IF NOT EXISTS updates (
                 id INT AUTO_INCREMENT PRIMARY KEY,
-                discord_id INT,
+                discord_id BIGINT,
                 status TEXT NOT NULL,
                 timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (discord_id) REFERENCES users(discord_id)
+                FOREIGN KEY (discord_id) REFERENCES team_members(discord_id)
             );
         ''')
         
         # Create Streaks Table
         c.execute('''
             CREATE TABLE IF NOT EXISTS streaks (
-                discord_id INT PRIMARY KEY,
+                discord_id BIGINT PRIMARY KEY,
                 current_streak INT DEFAULT 0,
-                FOREIGN KEY (discord_id) REFERENCES users(discord_id)
+                FOREIGN KEY (discord_id) REFERENCES team_members(discord_id)
             );
         ''')
         
         self.conn.commit()
 
-    def insert_status(self, discord_id: int, name: str, status: str):
+    def insert_status(self, discord_id: int, status: str):
         """Inserts a new status update into the 'updates' table."""
         c = self.conn.cursor()
-        c.execute("INSERT INTO updates (discord_id, name, status) VALUES (%s, %s, %s)",
-                  (discord_id, name, status))
+        c.execute("INSERT INTO updates (discord_id, status) VALUES (%s, %s)",
+                  (discord_id, status))
         self.conn.commit()
 
-    def get_all_statuses(self) -> List[Tuple[int, str, str, str]]:
+    def get_all_statuses(self) -> List[Tuple[int, str, str]]:
         """Fetches all status updates from the 'updates' table."""
         c = self.conn.cursor()
         c.execute("SELECT discord_id, status, timestamp FROM updates")
@@ -82,8 +84,11 @@ class StatusDB:
     def insert_new_member(self, discord_id: int, name: str, time_zone: str):
         """Inserts a new team member into the 'team_members' table."""
         c = self.conn.cursor()
-        c.execute("INSERT OR REPLACE INTO team_members (discord_id, name, time_zone) VALUES (%s, %s, %s)",
-                  (discord_id, name, time_zone))
+        c.execute("""
+            INSERT INTO team_members (discord_id, name, time_zone)
+            VALUES (%s, %s, %s)
+            ON DUPLICATE KEY UPDATE name = %s, time_zone = %s
+        """, (discord_id, name, time_zone, name, time_zone))
         self.conn.commit()
 
     def remove_member(self, discord_id: int):

@@ -25,12 +25,22 @@ GUILD_TOKEN = int(os.getenv('DISCORD_GUILD_TOKEN'))
 CHANNEL_TOKEN = int(os.getenv('DISCORD_CHANNEL_TOKEN'))
 ADMIN_DISCORD_ID = int(os.getenv('ADMIN_DISCORD_ID'))
 
+# Retrieve database credentials from environment variables
+MYSQL_HOST = os.getenv('MYSQL_HOST')
+MYSQL_USER = os.getenv('MYSQL_USER')
+MYSQL_PASSWORD = os.getenv('MYSQL_PASSWORD')
+MYSQL_DB = os.getenv('MYSQL_DB')
+MYSQL_PORT = os.getenv('MYSQL_PORT')
+
 # Initialize bot with default intents
 intents = Intents.default()
 intents.members = True
 bot = commands.Bot(command_prefix='!', intents=intents)
+
+# Initialize database
+db = StatusDB(MYSQL_HOST, MYSQL_USER, MYSQL_PASSWORD, MYSQL_DB, MYSQL_PORT)
+
 # TODO: Remove these globals
-db = StatusDB()
 weekly_post_manager = None
 team_member_manager = None
 
@@ -85,7 +95,7 @@ async def send_status_request(member: TeamMember, weekly_post_manager: WeeklyPos
         msg = await bot.wait_for('message', check=check)
 
         # Insert the status update into the database
-        db.insert_status(member.discord_id, member.name, msg.content)
+        db.insert_status(member.discord_id, msg.content)
 
         # Update the streak for this member
         weekly_post_manager.update_streak(member, db)
@@ -156,11 +166,10 @@ async def on_ready():
     global weekly_post_manager
     
     weekly_post_manager = WeeklyPostManager(channel, team_members)
-    check_weekly_post.start(weekly_post_manager, team_members)
-
     # Initialize new weekly post
     await weekly_post_manager.initialize_post(db)
     
+    check_weekly_post.start(weekly_post_manager, team_members)
     scheduler = Scheduler()
     
     for member in team_members:

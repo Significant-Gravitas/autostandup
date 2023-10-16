@@ -30,6 +30,7 @@ class WeeklyPostManager:
         weekly post. If the file does not exist, it sets the ID and timestamp to None.
         """
         try:
+            # TODO: Use a database instead of a JSON
             with open("weekly_post_data.json", "r") as f:
                 data = json.load(f)
             self.editable_weekly_post_id = data.get('post_id', None)
