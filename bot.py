@@ -133,6 +133,8 @@ async def send_status_request(member: TeamMember, weekly_post_manager: WeeklyPos
         
         # Extract the generated text
         generated_text = response['choices'][0]['message']['content'].strip()
+
+        db.update_summarized_status(member.discord_id, generated_text)
         
         # Send the generated summary to a designated Discord channel
         guild = bot.get_guild(GUILD_TOKEN)

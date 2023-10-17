@@ -32,6 +32,7 @@ class StatusDB:
                 id INT AUTO_INCREMENT PRIMARY KEY,
                 discord_id BIGINT,
                 status TEXT NOT NULL,
+                summarized_status TEXT,
                 timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (discord_id) REFERENCES team_members(discord_id) ON DELETE CASCADE
             );
@@ -61,6 +62,18 @@ class StatusDB:
         c = self.conn.cursor()
         c.execute("INSERT INTO updates (discord_id, status) VALUES (%s, %s)",
                   (discord_id, status))
+        self.conn.commit()
+
+    def update_summarized_status(self, discord_id: int, summarized_status: str):
+        """Updates the summarized_status for the most recent update for a given user."""
+        c = self.conn.cursor()
+        c.execute("""
+            UPDATE updates
+            SET summarized_status = %s
+            WHERE discord_id = %s
+            ORDER BY timestamp DESC
+            LIMIT 1
+        """, (summarized_status, discord_id))
         self.conn.commit()
 
     def get_all_statuses(self) -> List[Tuple[int, str, str]]:
