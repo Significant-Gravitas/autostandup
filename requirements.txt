@@ -4,3 +4,4 @@ python-dotenv==1.0.0
 pytz==2023.2
 Flask==3.0.0
 mysql-connector-python==8.1.0
+openai==0.27.6

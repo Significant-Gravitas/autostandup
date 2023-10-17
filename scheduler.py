@@ -3,17 +3,20 @@ from apscheduler.triggers.cron import CronTrigger
 from team_member import TeamMember
 from weekly_post_manager import WeeklyPostManager
 import pytz
+from typing import Dict, List
 
 class Scheduler:
     """Scheduler class to manage timed jobs for sending status requests.
-    
+
     Attributes:
         scheduler: The APScheduler object.
+        job_ids: A dictionary to store lists of job IDs for each member.
     """
     
     def __init__(self) -> None:
         """Initialize the Scheduler object and start the APScheduler."""
         self.scheduler: AsyncIOScheduler = AsyncIOScheduler()
+        self.job_ids: Dict[int, List[str]] = {}  # Store job IDs indexed by member's Discord ID
         self.scheduler.start()
 
     def add_job(self, func: callable, member: TeamMember, weekly_post_manager: WeeklyPostManager) -> None:
@@ -26,7 +29,22 @@ class Scheduler:
         time_zone = pytz.timezone(member.time_zone)
         
         weekday_trigger = CronTrigger(day_of_week='mon,tue,wed,thu,fri', hour=10, timezone=time_zone)
-        self.scheduler.add_job(func, weekday_trigger, args=[member, weekly_post_manager])
-        
         weekend_trigger = CronTrigger(day_of_week='sat,sun', hour=11, timezone=time_zone)
-        self.scheduler.add_job(func, weekend_trigger, args=[member, weekly_post_manager])
+
+        weekday_job = self.scheduler.add_job(func, weekday_trigger, args=[member, weekly_post_manager])
+        weekend_job = self.scheduler.add_job(func, weekend_trigger, args=[member, weekly_post_manager])
+
+        self.job_ids.setdefault(member.discord_id, []).extend([weekday_job.id, weekend_job.id])
+
+    def remove_job(self, discord_id: int) -> None:
+        """Remove jobs for a specific team member.
+        
+        Args:
+            discord_id: The Discord ID of the member for whom the job should be removed.
+        """
+        job_ids = self.job_ids.get(discord_id, [])
+        for job_id in job_ids:
+            self.scheduler.remove_job(job_id)
+
+        if discord_id in self.job_ids:
+            del self.job_ids[discord_id]  # Remove the job IDs from the dictionary

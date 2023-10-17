@@ -1,5 +1,6 @@
 # Import required modules
 import os
+import json
 from typing import List
 import pytz
 from discord.ext import commands, tasks
@@ -13,6 +14,7 @@ from weekly_post_manager import WeeklyPostManager
 from team_member_manager import TeamMemberManager
 from flask import Flask
 from multiprocessing import Process
+import openai
 
 app = Flask(__name__)
 
@@ -32,10 +34,13 @@ MYSQL_PASSWORD = os.getenv('MYSQL_PASSWORD')
 MYSQL_DB = os.getenv('MYSQL_DB')
 MYSQL_PORT = os.getenv('MYSQL_PORT')
 
+OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
+
 # Initialize bot with default intents
 intents = Intents.default()
 intents.members = True
 bot = commands.Bot(command_prefix='!', intents=intents)
+openai.api_key = OPENAI_API_KEY
 
 # Initialize database
 db = StatusDB(MYSQL_HOST, MYSQL_USER, MYSQL_PASSWORD, MYSQL_DB, MYSQL_PORT)
@@ -43,6 +48,7 @@ db = StatusDB(MYSQL_HOST, MYSQL_USER, MYSQL_PASSWORD, MYSQL_DB, MYSQL_PORT)
 # TODO: Remove these globals
 weekly_post_manager = None
 team_member_manager = None
+scheduler = None
 
 # Define a loop that runs every 48 hours to ping for status updates
 @tasks.loop(hours=48)
@@ -84,11 +90,11 @@ async def send_status_request(member: TeamMember, weekly_post_manager: WeeklyPos
     user = bot.get_user(member.discord_id)
     if user:
         await user.send(
-            f"Good morning {member.name}, time for your daily status update!\n"
-            f"Please include in a single message:\n"
-            f"What you accomplished yesterday.\n"
-            f"What you plan to work on today.\n"
-            f"(Note: We're currently only processing the first message you send back. Multi-message updates are coming soon!)"
+            f"# Good morning {member.name}, time for your daily status update!\n"
+            f"## Please include in a single message:\n"
+            f"### What you accomplished yesterday.\n"
+            f"### What you plan to work on today.\n"
+            f"### **(Note: We're currently only processing the first message you send back. Multi-message updates are coming soon!)**"
         )
 
         def check(m) -> bool:
@@ -106,6 +112,33 @@ async def send_status_request(member: TeamMember, weekly_post_manager: WeeklyPos
         # Update the Discord post using WeeklyPostManager
         await weekly_post_manager.update_post(member, db)
 
+        # Prepare a system message to guide OpenAI's model
+        system_message = "Please summarize the user's update into two sections: 'Did' for tasks completed yesterday and 'Do' for tasks planned for today."
+        
+        # User's message that you want to summarize
+        user_message = msg.content
+        
+        # Prepare the messages input for ChatCompletion
+        messages = [
+            {"role": "system", "content": system_message},
+            {"role": "user", "content": user_message}
+        ]
+        
+        # OpenAI API call using ChatCompletion
+        model_engine = "gpt-3.5-turbo-0613"
+        response = openai.ChatCompletion.create(
+            model=model_engine,
+            messages=messages
+        )
+        
+        # Extract the generated text
+        generated_text = response['choices'][0]['message']['content'].strip()
+        
+        # Send the generated summary to a designated Discord channel
+        guild = bot.get_guild(GUILD_TOKEN)
+        channel_to_post_in = guild.get_channel(CHANNEL_TOKEN)
+        await channel_to_post_in.send(f"**{member.name}'s summary:**\n{generated_text}")
+
 @bot.command(name='adduser')
 async def add_user(ctx, discord_id: int, time_zone: str, name: str):
     if ctx.message.author.id != ADMIN_DISCORD_ID or not isinstance(ctx.channel, DMChannel):
@@ -119,6 +152,7 @@ async def add_user(ctx, discord_id: int, time_zone: str, name: str):
     new_member = team_member_manager.find_member(discord_id)
     if new_member:
         await weekly_post_manager.add_member_to_post(new_member, db)
+        scheduler.add_job(send_status_request, new_member, weekly_post_manager) 
     
     await ctx.send(f"User {name} added successfully.")
 
@@ -137,7 +171,8 @@ async def remove_user(ctx, discord_id: int):
         
         # Update the weekly post to remove the member
         await weekly_post_manager.remove_member_from_post(member_to_remove, db)
-        
+        scheduler.remove_job(discord_id)
+
         await ctx.send(f"User with Discord ID {discord_id} removed successfully.")
     else:
         await ctx.send(f"No user with Discord ID {discord_id} found.")
@@ -173,6 +208,8 @@ async def on_ready():
     await weekly_post_manager.initialize_post(db)
 
     check_weekly_post.start(weekly_post_manager, team_members)
+
+    global scheduler
     scheduler = Scheduler()
     
     for member in team_members:
