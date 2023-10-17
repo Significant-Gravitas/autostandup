@@ -141,6 +141,22 @@ async def send_status_request(member: TeamMember, weekly_post_manager: WeeklyPos
         channel_to_post_in = guild.get_channel(CHANNEL_TOKEN)
         await channel_to_post_in.send(f"**{member.name}'s summary:**\n{generated_text}")
 
+@bot.command(name='statusrequest')
+async def status_request(ctx, discord_id: int):
+    if ctx.message.author.id != ADMIN_DISCORD_ID or not isinstance(ctx.channel, DMChannel):
+        await ctx.send("You're not authorized to request status.")
+        return
+
+    # Find the member object using the Discord ID
+    member_to_request = team_member_manager.find_member(discord_id)
+
+    if member_to_request:
+        # Send the status request to the member
+        await send_status_request(member_to_request, weekly_post_manager)
+        await ctx.send(f"Status request sent to user with Discord ID {discord_id}.")
+    else:
+        await ctx.send(f"No user with Discord ID {discord_id} found.")
+
 @bot.command(name='adduser')
 async def add_user(ctx, discord_id: int, time_zone: str, name: str):
     if ctx.message.author.id != ADMIN_DISCORD_ID or not isinstance(ctx.channel, DMChannel):
