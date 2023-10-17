@@ -26,27 +26,27 @@ class StatusDB:
             );
         ''')
         
-        # Create Updates Table
+        # Create updates Table
         c.execute('''
             CREATE TABLE IF NOT EXISTS updates (
                 id INT AUTO_INCREMENT PRIMARY KEY,
                 discord_id BIGINT,
                 status TEXT NOT NULL,
                 timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (discord_id) REFERENCES team_members(discord_id)
+                FOREIGN KEY (discord_id) REFERENCES team_members(discord_id) ON DELETE CASCADE
             );
         ''')
         
-        # Create Streaks Table
+        # Create streaks Table
         c.execute('''
             CREATE TABLE IF NOT EXISTS streaks (
                 discord_id BIGINT PRIMARY KEY,
                 current_streak INT DEFAULT 0,
-                FOREIGN KEY (discord_id) REFERENCES team_members(discord_id)
+                FOREIGN KEY (discord_id) REFERENCES team_members(discord_id) ON DELETE CASCADE
             );
         ''')
 
-        # Create Weekly Posts Table
+        # Create weekly posts Table
         c.execute('''
             CREATE TABLE IF NOT EXISTS weekly_posts (
                 post_id BIGINT PRIMARY KEY,

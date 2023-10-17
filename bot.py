@@ -97,6 +97,7 @@ async def send_status_request(member: TeamMember, weekly_post_manager: WeeklyPos
         msg = await bot.wait_for('message', check=check)
 
         # Insert the status update into the database
+        # TODO: We should not be calling database directly, create appropriate managers and smaller databases
         db.insert_status(member.discord_id, msg.content)
 
         # Update the streak for this member
