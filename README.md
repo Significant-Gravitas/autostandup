@@ -1,4 +1,4 @@
-# AutoStandup
+# autostandup
 
 ## Overview
 This repository contains the code for a Discord bot designed to automate status updates within remote teams. It's part of the AutoGPT team's initiative to enhance visibility and accountability. The bot pings team members in a specific channel at regular intervals, asking for a quick status update.
