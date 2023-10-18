@@ -1,6 +1,6 @@
 from typing import List
-from team_member import TeamMember
-from team_member_db import TeamMemberDB
+from team_members.team_member import TeamMember
+from team_members.team_member_db import TeamMemberDB
 
 class TeamMemberManager:
     """
@@ -11,7 +11,7 @@ class TeamMemberManager:
         """
         Initialize a TeamMemberManager object.
 
-        :param db: StatusDB object for interacting with the database.
+        :param db: TeamMemberDB object for interacting with the database.
         """
         self.db = db
         self.team_members = self.load_team_members()
