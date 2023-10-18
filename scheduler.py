@@ -2,6 +2,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from streaks.streaks_manager import StreaksManager
 from team_members.team_member import TeamMember
+from updates.updates_manager import UpdatesManager
 from weekly_posts.weekly_post_manager import WeeklyPostManager
 import pytz
 from typing import Dict, List
@@ -20,7 +21,7 @@ class Scheduler:
         self.job_ids: Dict[int, List[str]] = {}  # Store job IDs indexed by member's Discord ID
         self.scheduler.start()
 
-    def add_job(self, func: callable, member: TeamMember, weekly_post_manager: WeeklyPostManager, streaks_manager: StreaksManager) -> None:
+    def add_job(self, func: callable, member: TeamMember, weekly_post_manager: WeeklyPostManager, streaks_manager: StreaksManager, updates_manager: UpdatesManager) -> None:
         """Add a new job to the scheduler for a specific team member.
         
         Args:
@@ -32,8 +33,8 @@ class Scheduler:
         weekday_trigger = CronTrigger(day_of_week='mon,tue,wed,thu,fri', hour=10, timezone=time_zone)
         weekend_trigger = CronTrigger(day_of_week='sat,sun', hour=11, timezone=time_zone)
 
-        weekday_job = self.scheduler.add_job(func, weekday_trigger, args=[member, weekly_post_manager, streaks_manager])
-        weekend_job = self.scheduler.add_job(func, weekend_trigger, args=[member, weekly_post_manager, streaks_manager])
+        weekday_job = self.scheduler.add_job(func, weekday_trigger, args=[member, weekly_post_manager, streaks_manager, updates_manager])
+        weekend_job = self.scheduler.add_job(func, weekend_trigger, args=[member, weekly_post_manager, streaks_manager, updates_manager])
 
         self.job_ids.setdefault(member.discord_id, []).extend([weekday_job.id, weekend_job.id])
 
