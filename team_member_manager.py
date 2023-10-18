@@ -1,13 +1,13 @@
 from typing import List
 from team_member import TeamMember
-from status_db import StatusDB
+from team_member_db import TeamMemberDB
 
 class TeamMemberManager:
     """
     Manages operations related to team members.
     """
 
-    def __init__(self, db: StatusDB):
+    def __init__(self, db: TeamMemberDB):
         """
         Initialize a TeamMemberManager object.
 

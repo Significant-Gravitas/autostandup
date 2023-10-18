@@ -1,14 +1,17 @@
 # Import required modules
 import os
-import json
 from typing import List
 import pytz
+from streaks_db import StreaksDB
+from team_member_db import TeamMemberDB
+from updates_db import UpdatesDB
+from weekly_posts_db import WeeklyPostsDB
+
 from discord.ext import commands, tasks
 from discord import Intents, DMChannel
 from dotenv import load_dotenv
 from scheduler import Scheduler
 from team_member import TeamMember
-from status_db import StatusDB
 from datetime import datetime
 from weekly_post_manager import WeeklyPostManager
 from team_member_manager import TeamMemberManager
@@ -42,13 +45,11 @@ intents.members = True
 bot = commands.Bot(command_prefix='!', intents=intents)
 openai.api_key = OPENAI_API_KEY
 
-# Initialize database
-db = StatusDB(MYSQL_HOST, MYSQL_USER, MYSQL_PASSWORD, MYSQL_DB, MYSQL_PORT)
-
 # TODO: Remove these globals
 weekly_post_manager = None
 team_member_manager = None
 scheduler = None
+updates_db = UpdatesDB(MYSQL_HOST, MYSQL_USER, MYSQL_PASSWORD, MYSQL_DB, MYSQL_PORT)
 
 # Define a loop that runs every 48 hours to ping for status updates
 @tasks.loop(hours=48)
@@ -78,10 +79,10 @@ async def check_weekly_post(weekly_post_manager: WeeklyPostManager, team_members
         print(f"Initializing weekly post based on the earliest time zone: {earliest_time_zone}")
 
         # Reset streaks for the previous week
-        weekly_post_manager.reset_streaks(db)
+        weekly_post_manager.reset_streaks()
         
         # Initialize new weekly post
-        await weekly_post_manager.initialize_post(db)
+        await weekly_post_manager.initialize_post()
 
 async def send_status_request(member: TeamMember, weekly_post_manager: WeeklyPostManager):
     if weekly_post_manager.has_all_checkmarks(member):
@@ -103,14 +104,14 @@ async def send_status_request(member: TeamMember, weekly_post_manager: WeeklyPos
         msg = await bot.wait_for('message', check=check)
 
         # Insert the status update into the database
-        # TODO: We should not be calling database directly, create appropriate managers and smaller databases
-        db.insert_status(member.discord_id, msg.content)
+        # TODO: We should not be calling database directly, create appropriate managers
+        updates_db.insert_status(member.discord_id, msg.content)
 
         # Update the streak for this member
-        weekly_post_manager.update_streak(member, db)
+        weekly_post_manager.update_streak(member)
 
         # Update the Discord post using WeeklyPostManager
-        await weekly_post_manager.update_post(member, db)
+        await weekly_post_manager.update_post(member)
 
         # Prepare a system message to guide OpenAI's model
         system_message = "Please summarize the user's update into two sections: 'Did' for tasks completed yesterday and 'Do' for tasks planned for today."
@@ -134,7 +135,8 @@ async def send_status_request(member: TeamMember, weekly_post_manager: WeeklyPos
         # Extract the generated text
         generated_text = response['choices'][0]['message']['content'].strip()
 
-        db.update_summarized_status(member.discord_id, generated_text)
+        # TODO: We should not be calling database directly, create appropriate managers
+        updates_db.update_summarized_status(member.discord_id, generated_text)
         
         # Send the generated summary to a designated Discord channel
         guild = bot.get_guild(GUILD_TOKEN)
@@ -169,7 +171,7 @@ async def add_user(ctx, discord_id: int, time_zone: str, name: str):
     # Update the weekly post to include the new member
     new_member = team_member_manager.find_member(discord_id)
     if new_member:
-        await weekly_post_manager.add_member_to_post(new_member, db)
+        await weekly_post_manager.add_member_to_post(new_member)
         scheduler.add_job(send_status_request, new_member, weekly_post_manager) 
     
     await ctx.send(f"User {name} added successfully.")
@@ -188,7 +190,7 @@ async def remove_user(ctx, discord_id: int):
         team_member_manager.remove_member(discord_id)
         
         # Update the weekly post to remove the member
-        await weekly_post_manager.remove_member_from_post(member_to_remove, db)
+        await weekly_post_manager.remove_member_from_post(member_to_remove)
         scheduler.remove_job(discord_id)
 
         await ctx.send(f"User with Discord ID {discord_id} removed successfully.")
@@ -211,9 +213,13 @@ async def list_users(ctx):
 async def on_ready():
     print("Bot is online!")  # Log that the bot is online
 
+    weekly_posts_db = WeeklyPostsDB(MYSQL_HOST, MYSQL_USER, MYSQL_PASSWORD, MYSQL_DB, MYSQL_PORT)
+    team_member_db = TeamMemberDB(MYSQL_HOST, MYSQL_USER, MYSQL_PASSWORD, MYSQL_DB, MYSQL_PORT)
+    streaks_db = StreaksDB(MYSQL_HOST, MYSQL_USER, MYSQL_PASSWORD, MYSQL_DB, MYSQL_PORT)
+
     global team_member_manager
 
-    team_member_manager = TeamMemberManager(db)
+    team_member_manager = TeamMemberManager(team_member_db)
     team_members = team_member_manager.load_team_members()
 
     guild = bot.get_guild(GUILD_TOKEN)
@@ -221,9 +227,9 @@ async def on_ready():
 
     global weekly_post_manager
     
-    weekly_post_manager = WeeklyPostManager(channel, team_members, db)
+    weekly_post_manager = WeeklyPostManager(channel, team_members, streaks_db, weekly_posts_db)
     # Initialize new weekly post
-    await weekly_post_manager.initialize_post(db)
+    await weekly_post_manager.initialize_post()
 
     check_weekly_post.start(weekly_post_manager, team_members)
 

@@ -1,13 +1,14 @@
 from datetime import datetime, timedelta
 import pytz
 from typing import List
-from status_db import StatusDB
+from streaks_db import StreaksDB
+from weekly_posts_db import WeeklyPostsDB
 from team_member import TeamMember
 
 class WeeklyPostManager:
     """Manages the status post in a Discord channel."""
     
-    def __init__(self, channel, team_members: List[TeamMember], db: StatusDB):
+    def __init__(self, channel, team_members: List[TeamMember], streaks_db: StreaksDB, weekly_posts_db: WeeklyPostsDB):
         """
         Initializes a new WeeklyPostManager instance.
 
@@ -17,7 +18,8 @@ class WeeklyPostManager:
         """
         self.channel = channel
         self.team_members = team_members
-        self.db = db
+        self.streaks_db = streaks_db
+        self.weekly_posts_db = weekly_posts_db
         self.max_name_length = max((len(m.name) for m in team_members), default=0)
         self.editable_weekly_post = None
         self.load_weekly_post_data()
@@ -28,11 +30,8 @@ class WeeklyPostManager:
         
         This method queries the 'weekly_posts' table to get the ID and timestamp of 
         the last weekly post. If no data exists, it sets the ID and timestamp to None.
-        
-        Args:
-            db (StatusDB): The StatusDB object for interacting with the database.
         """
-        data = self.db.get_weekly_post_data()
+        data = self.weekly_posts_db.get_weekly_post_data()
         self.editable_weekly_post_id = data.get('post_id', None)
         self.weekly_post_timestamp = data.get('timestamp', None)
 
@@ -42,13 +41,10 @@ class WeeklyPostManager:
         
         This method inserts or updates the ID and timestamp of the current weekly post 
         in the 'weekly_posts' table.
-        
-        Args:
-            db (StatusDB): The StatusDB object for interacting with the database.
         """
-        self.db.save_weekly_post_data(self.editable_weekly_post.id, datetime.now())
+        self.weekly_posts_db.save_weekly_post_data(self.editable_weekly_post.id, datetime.now())
 
-    async def initialize_post(self, db: StatusDB):
+    async def initialize_post(self):
         """
         Initializes or retrieves the weekly status post on Discord.
 
@@ -75,7 +71,7 @@ class WeeklyPostManager:
         # Add streaks to the member list
         member_list = []
         for m in self.team_members:
-            streak = db.get_streak(m.discord_id)  # Fetch the streak from the database
+            streak = self.streaks_db.get_streak(m.discord_id)  # Fetch the streak from the database
             day_suffix = "day" if streak == 1 else "days"  # Choose the appropriate suffix
             member_list.append(f"# `{m.name.ljust(self.max_name_length)} {'❓' * 5} (Streak: {streak} {day_suffix})`")
 
@@ -88,7 +84,7 @@ class WeeklyPostManager:
             self.save_weekly_post_data()  # Save the ID and timestamp after creating the post
 
 
-    async def update_post(self, member: TeamMember, db: StatusDB):
+    async def update_post(self, member: TeamMember):
         # Split the content into lines and find the line related to this member
         lines = self.editable_weekly_post.content.split('\n')
         line_to_edit = next((line for line in lines if member.name in line), None)
@@ -111,7 +107,7 @@ class WeeklyPostManager:
         new_marks_streak = marks_streak[:first_question_mark] + "✅" + marks_streak[first_question_mark + 1:]
 
         # Update the streak count
-        new_streak = db.get_streak(member.discord_id)
+        new_streak = self.streaks_db.get_streak(member.discord_id)
         new_streak_str = f"(Streak: {new_streak} {'day' if new_streak == 1 else 'days'})"
 
         # Reconstruct the new line for this member
@@ -163,7 +159,7 @@ class WeeklyPostManager:
         return dt.strftime(f"%B {day}{suffix[suffix_index]}")
     
     # TODO: Create a streak manager
-    def update_streak(self, member: TeamMember, db: StatusDB) -> None:
+    def update_streak(self, member: TeamMember) -> None:
         """
         Updates the streak count for a specific team member.
 
@@ -172,16 +168,15 @@ class WeeklyPostManager:
 
         Args:
             member (TeamMember): The TeamMember object whose streak needs to be updated.
-            db (StatusDB): The StatusDB object for interacting with the database.
 
         Returns:
             None
         """
-        existing_streak = db.get_streak(member.discord_id)
+        existing_streak = self.streaks_db.get_streak(member.discord_id)
         new_streak = existing_streak + 1
-        db.update_streak(member.discord_id, new_streak)
+        self.streaks_db.update_streak(member.discord_id, new_streak)
 
-    def reset_streaks(self, db: StatusDB) -> None:
+    def reset_streaks(self) -> None:
         """
         Resets the streaks for all team members who have fewer than 5 checkmarks.
 
@@ -189,15 +184,12 @@ class WeeklyPostManager:
         at least 5 checkmarks for the current week. If not, their streak is reset
         to zero in the database.
 
-        Args:
-            db (StatusDB): The StatusDB object for interacting with the database.
-
         Returns:
             None
         """
         for member in self.team_members:
             if not self.has_minimum_checkmarks(member, 5):
-                db.update_streak(member.discord_id, 0)
+                self.streaks_db.update_streak(member.discord_id, 0)
 
     def has_minimum_checkmarks(self, member: TeamMember, n: int) -> bool:
         """
@@ -223,7 +215,7 @@ class WeeklyPostManager:
 
         return existing_line.count("✅") >= n
 
-    async def rebuild_post(self, db: StatusDB):
+    async def rebuild_post(self):
         """
         Rebuilds the weekly status post with updated team members and alignment.
 
@@ -231,16 +223,13 @@ class WeeklyPostManager:
         are correctly displayed for each team member. It also handles edge cases like adding the first
         member and removing the last one.
 
-        Args:
-            db (StatusDB): The StatusDB object for interacting with the database.
-
         Returns:
             None
         """
         # If there are team members but no editable post yet, create one for the first member
         if self.team_members and self.editable_weekly_post is None:
             first_member = self.team_members[0]
-            streak = db.get_streak(first_member.discord_id)
+            streak = self.streaks_db.get_streak(first_member.discord_id)
             day_suffix = "day" if streak == 1 else "days"
             initial_content = f"# `{first_member.name.ljust(self.max_name_length)} {'❓' * 5} (Streak: {streak} {day_suffix})`"
             self.editable_weekly_post = await self.channel.send(initial_content)
@@ -276,7 +265,7 @@ class WeeklyPostManager:
                     existing_marks = member_line[first_question_mark:first_question_mark + 5]
             
             # Fetch the streak from the database
-            streak = db.get_streak(m.discord_id)
+            streak = self.streaks_db.get_streak(m.discord_id)
             day_suffix = "day" if streak == 1 else "days"
             
             # Create the new line for the member
@@ -288,13 +277,12 @@ class WeeklyPostManager:
 
         self.editable_weekly_post = await self.editable_weekly_post.edit(content=new_content)
 
-    async def add_member_to_post(self, member: TeamMember, db: StatusDB):
+    async def add_member_to_post(self, member: TeamMember):
         """
         Adds a new member to the editable weekly post and rebuilds it.
 
         Args:
             member (TeamMember): The new member to be added.
-            db (StatusDB): The StatusDB object for interacting with the database.
 
         Returns:
             None
@@ -304,15 +292,14 @@ class WeeklyPostManager:
         self.max_name_length = max([len(m.name) for m in self.team_members])
         
         # Rebuild the post to reflect the changes
-        await self.rebuild_post(db)
+        await self.rebuild_post()
 
-    async def remove_member_from_post(self, member: TeamMember, db: StatusDB):
+    async def remove_member_from_post(self, member: TeamMember):
         """
         Removes a member from the editable weekly post and rebuilds it.
 
         Args:
             member (TeamMember): The member to be removed.
-            db (StatusDB): The StatusDB object for interacting with the database.
 
         Returns:
             None
@@ -322,5 +309,5 @@ class WeeklyPostManager:
         self.max_name_length = max([len(m.name) for m in self.team_members]) if self.team_members else 0
         
         # Rebuild the post to reflect the changes
-        await self.rebuild_post(db)
+        await self.rebuild_post()
 
