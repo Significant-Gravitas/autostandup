@@ -2,19 +2,20 @@
 import os
 from typing import List
 import pytz
-from streaks_db import StreaksDB
-from team_member_db import TeamMemberDB
-from updates_db import UpdatesDB
-from weekly_posts_db import WeeklyPostsDB
+from streaks.streaks_db import StreaksDB
+from streaks.streaks_manager import StreaksManager
+from team_members.team_member_db import TeamMemberDB
+from updates.updates_db import UpdatesDB
+from weekly_posts.weekly_posts_db import WeeklyPostsDB
 
 from discord.ext import commands, tasks
 from discord import Intents, DMChannel
 from dotenv import load_dotenv
 from scheduler import Scheduler
-from team_member import TeamMember
+from team_members.team_member import TeamMember
 from datetime import datetime
-from weekly_post_manager import WeeklyPostManager
-from team_member_manager import TeamMemberManager
+from weekly_posts.weekly_post_manager import WeeklyPostManager
+from team_members.team_member_manager import TeamMemberManager
 from flask import Flask
 from multiprocessing import Process
 import openai
@@ -46,6 +47,7 @@ bot = commands.Bot(command_prefix='!', intents=intents)
 openai.api_key = OPENAI_API_KEY
 
 # TODO: Remove these globals
+streaks_manager = None
 weekly_post_manager = None
 team_member_manager = None
 scheduler = None
@@ -62,7 +64,7 @@ async def ping_for_status() -> None:
 
 # Define a loop that runs every 30 minutes to check if a new weekly post should be created
 @tasks.loop(minutes=30)
-async def check_weekly_post(weekly_post_manager: WeeklyPostManager, team_members: List[TeamMember]):
+async def check_weekly_post(weekly_post_manager: WeeklyPostManager, streaks_manager: StreaksManager, team_members: List[TeamMember]):
     earliest_time_zone = None
     earliest_time = None
     
@@ -79,12 +81,14 @@ async def check_weekly_post(weekly_post_manager: WeeklyPostManager, team_members
         print(f"Initializing weekly post based on the earliest time zone: {earliest_time_zone}")
 
         # Reset streaks for the previous week
-        weekly_post_manager.reset_streaks()
+        for member in team_members:
+            if not weekly_post_manager.has_minimum_checkmarks(member, 5):
+                streaks_manager.reset_streak(member.discord_id)
         
         # Initialize new weekly post
         await weekly_post_manager.initialize_post()
 
-async def send_status_request(member: TeamMember, weekly_post_manager: WeeklyPostManager):
+async def send_status_request(member: TeamMember, weekly_post_manager: WeeklyPostManager, streaks_manager: StreaksManager):
     if weekly_post_manager.has_all_checkmarks(member):
         return  # If all checkmarks are present, do nothing
 
@@ -108,7 +112,8 @@ async def send_status_request(member: TeamMember, weekly_post_manager: WeeklyPos
         updates_db.insert_status(member.discord_id, msg.content)
 
         # Update the streak for this member
-        weekly_post_manager.update_streak(member)
+        streak = streaks_manager.get_streak(member.discord_id)
+        streaks_manager.update_streak(streak + 1)
 
         # Update the Discord post using WeeklyPostManager
         await weekly_post_manager.update_post(member)
@@ -154,8 +159,9 @@ async def status_request(ctx, discord_id: int):
 
     if member_to_request:
         # Send the status request to the member
-        await send_status_request(member_to_request, weekly_post_manager)
         await ctx.send(f"Status request sent to user with Discord ID {discord_id}.")
+        await send_status_request(member_to_request, weekly_post_manager, streaks_manager)
+        await ctx.send(f"Status request received from user with Discord ID {discord_id}.")
     else:
         await ctx.send(f"No user with Discord ID {discord_id} found.")
 
@@ -172,7 +178,7 @@ async def add_user(ctx, discord_id: int, time_zone: str, name: str):
     new_member = team_member_manager.find_member(discord_id)
     if new_member:
         await weekly_post_manager.add_member_to_post(new_member)
-        scheduler.add_job(send_status_request, new_member, weekly_post_manager) 
+        scheduler.add_job(send_status_request, new_member, weekly_post_manager, streaks_manager) 
     
     await ctx.send(f"User {name} added successfully.")
 
@@ -213,9 +219,13 @@ async def list_users(ctx):
 async def on_ready():
     print("Bot is online!")  # Log that the bot is online
 
-    weekly_posts_db = WeeklyPostsDB(MYSQL_HOST, MYSQL_USER, MYSQL_PASSWORD, MYSQL_DB, MYSQL_PORT)
-    team_member_db = TeamMemberDB(MYSQL_HOST, MYSQL_USER, MYSQL_PASSWORD, MYSQL_DB, MYSQL_PORT)
     streaks_db = StreaksDB(MYSQL_HOST, MYSQL_USER, MYSQL_PASSWORD, MYSQL_DB, MYSQL_PORT)
+    team_member_db = TeamMemberDB(MYSQL_HOST, MYSQL_USER, MYSQL_PASSWORD, MYSQL_DB, MYSQL_PORT)
+    weekly_posts_db = WeeklyPostsDB(MYSQL_HOST, MYSQL_USER, MYSQL_PASSWORD, MYSQL_DB, MYSQL_PORT)
+
+    global streaks_manager
+
+    streaks_manager = StreaksManager(streaks_db)
 
     global team_member_manager
 
@@ -227,17 +237,17 @@ async def on_ready():
 
     global weekly_post_manager
     
-    weekly_post_manager = WeeklyPostManager(channel, team_members, streaks_db, weekly_posts_db)
+    weekly_post_manager = WeeklyPostManager(channel, team_members, streaks_manager, weekly_posts_db)
     # Initialize new weekly post
     await weekly_post_manager.initialize_post()
 
-    check_weekly_post.start(weekly_post_manager, team_members)
+    check_weekly_post.start(weekly_post_manager, streaks_manager, team_members)
 
     global scheduler
     scheduler = Scheduler()
     
     for member in team_members:
-        scheduler.add_job(send_status_request, member, weekly_post_manager) 
+        scheduler.add_job(send_status_request, member, weekly_post_manager, streaks_manager) 
 
 @app.route('/')
 def index(): 

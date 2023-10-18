@@ -1,24 +1,20 @@
 from datetime import datetime, timedelta
 import pytz
 from typing import List
-from streaks_db import StreaksDB
-from weekly_posts_db import WeeklyPostsDB
-from team_member import TeamMember
+from streaks.streaks_manager import StreaksManager
+from weekly_posts.weekly_posts_db import WeeklyPostsDB
+from team_members.team_member import TeamMember
 
 class WeeklyPostManager:
     """Manages the status post in a Discord channel."""
     
-    def __init__(self, channel, team_members: List[TeamMember], streaks_db: StreaksDB, weekly_posts_db: WeeklyPostsDB):
+    def __init__(self, channel, team_members: List[TeamMember], streaks_manager: StreaksManager, weekly_posts_db: WeeklyPostsDB):
         """
         Initializes a new WeeklyPostManager instance.
-
-        Args:
-            channel: The Discord channel where the weekly post will be sent.
-            team_members: A list of TeamMember objects.
         """
         self.channel = channel
         self.team_members = team_members
-        self.streaks_db = streaks_db
+        self.streaks_manager = streaks_manager
         self.weekly_posts_db = weekly_posts_db
         self.max_name_length = max((len(m.name) for m in team_members), default=0)
         self.editable_weekly_post = None
@@ -71,7 +67,7 @@ class WeeklyPostManager:
         # Add streaks to the member list
         member_list = []
         for m in self.team_members:
-            streak = self.streaks_db.get_streak(m.discord_id)  # Fetch the streak from the database
+            streak = self.streaks_manager.get_streak(m.discord_id)  # Fetch the streak from the database
             day_suffix = "day" if streak == 1 else "days"  # Choose the appropriate suffix
             member_list.append(f"# `{m.name.ljust(self.max_name_length)} {'❓' * 5} (Streak: {streak} {day_suffix})`")
 
@@ -107,7 +103,7 @@ class WeeklyPostManager:
         new_marks_streak = marks_streak[:first_question_mark] + "✅" + marks_streak[first_question_mark + 1:]
 
         # Update the streak count
-        new_streak = self.streaks_db.get_streak(member.discord_id)
+        new_streak = self.streaks_manager.get_streak(member.discord_id)
         new_streak_str = f"(Streak: {new_streak} {'day' if new_streak == 1 else 'days'})"
 
         # Reconstruct the new line for this member
@@ -157,39 +153,6 @@ class WeeklyPostManager:
             suffix_index = day % 10  # use 'st', 'nd', 'rd' as appropriate
 
         return dt.strftime(f"%B {day}{suffix[suffix_index]}")
-    
-    # TODO: Create a streak manager
-    def update_streak(self, member: TeamMember) -> None:
-        """
-        Updates the streak count for a specific team member.
-
-        This method fetches the current streak count for the member from the database,
-        increments it by 1, and then updates the new streak back into the database.
-
-        Args:
-            member (TeamMember): The TeamMember object whose streak needs to be updated.
-
-        Returns:
-            None
-        """
-        existing_streak = self.streaks_db.get_streak(member.discord_id)
-        new_streak = existing_streak + 1
-        self.streaks_db.update_streak(member.discord_id, new_streak)
-
-    def reset_streaks(self) -> None:
-        """
-        Resets the streaks for all team members who have fewer than 5 checkmarks.
-
-        This method iterates over all team members and checks if each member has
-        at least 5 checkmarks for the current week. If not, their streak is reset
-        to zero in the database.
-
-        Returns:
-            None
-        """
-        for member in self.team_members:
-            if not self.has_minimum_checkmarks(member, 5):
-                self.streaks_db.update_streak(member.discord_id, 0)
 
     def has_minimum_checkmarks(self, member: TeamMember, n: int) -> bool:
         """
@@ -229,7 +192,7 @@ class WeeklyPostManager:
         # If there are team members but no editable post yet, create one for the first member
         if self.team_members and self.editable_weekly_post is None:
             first_member = self.team_members[0]
-            streak = self.streaks_db.get_streak(first_member.discord_id)
+            streak = self.streaks_manager.get_streak(first_member.discord_id)
             day_suffix = "day" if streak == 1 else "days"
             initial_content = f"# `{first_member.name.ljust(self.max_name_length)} {'❓' * 5} (Streak: {streak} {day_suffix})`"
             self.editable_weekly_post = await self.channel.send(initial_content)
@@ -265,7 +228,7 @@ class WeeklyPostManager:
                     existing_marks = member_line[first_question_mark:first_question_mark + 5]
             
             # Fetch the streak from the database
-            streak = self.streaks_db.get_streak(m.discord_id)
+            streak = self.streaks_manager.get_streak(m.discord_id)
             day_suffix = "day" if streak == 1 else "days"
             
             # Create the new line for the member
