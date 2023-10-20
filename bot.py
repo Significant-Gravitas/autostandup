@@ -117,7 +117,7 @@ async def send_status_request(member: TeamMember, weekly_post_manager: WeeklyPos
 
         # Update the streak for this member
         streak = streaks_manager.get_streak(member.discord_id)
-        streaks_manager.update_streak(streak + 1)
+        streaks_manager.update_streak(member.discord_id, streak + 1)
 
         # Update the Discord post using WeeklyPostManager
         await weekly_post_manager.update_post(member)
