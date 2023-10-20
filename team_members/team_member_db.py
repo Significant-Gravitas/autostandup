@@ -23,15 +23,14 @@ class TeamMemberDB(BaseDB):
         """
         Creates the 'team_members' table if it doesn't already exist.
         """
-        c = self.conn.cursor()
-        c.execute('''
+        query = '''
             CREATE TABLE IF NOT EXISTS team_members (
                 discord_id BIGINT PRIMARY KEY,
                 name VARCHAR(255) NOT NULL,
                 time_zone VARCHAR(50) NOT NULL
             );
-        ''')
-        self.conn.commit()
+        '''
+        self.execute_query(query)
 
     def insert_new_member(self, discord_id: int, name: str, time_zone: str):
         """
@@ -41,13 +40,13 @@ class TeamMemberDB(BaseDB):
         :param name: The name of the team member.
         :param time_zone: The time zone of the team member.
         """
-        c = self.conn.cursor()
-        c.execute("""
+        query = """
             INSERT INTO team_members (discord_id, name, time_zone)
             VALUES (%s, %s, %s)
             ON DUPLICATE KEY UPDATE name = %s, time_zone = %s
-        """, (discord_id, name, time_zone, name, time_zone))
-        self.conn.commit()
+        """
+        params = (discord_id, name, time_zone, name, time_zone)
+        self.execute_query(query, params)
 
     def remove_member(self, discord_id: int):
         """
@@ -55,9 +54,9 @@ class TeamMemberDB(BaseDB):
 
         :param discord_id: The Discord ID of the team member to remove.
         """
-        c = self.conn.cursor()
-        c.execute("DELETE FROM team_members WHERE discord_id = %s", (discord_id,))
-        self.conn.commit()
+        query = "DELETE FROM team_members WHERE discord_id = %s"
+        params = (discord_id,)
+        self.execute_query(query, params)
 
     def list_all_members(self) -> List[Tuple[int, str, str]]:
         """
@@ -65,6 +64,10 @@ class TeamMemberDB(BaseDB):
 
         :return: A list of tuples, each containing the Discord ID, name, and time zone of a team member.
         """
+        if not self.conn.is_connected():
+            print("Reconnecting to MySQL")
+            self.connect()
+
         c = self.conn.cursor()
         c.execute("SELECT discord_id, name, time_zone FROM team_members")
         return c.fetchall()

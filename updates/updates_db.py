@@ -23,8 +23,7 @@ class UpdatesDB(BaseDB):
         """
         Creates the 'updates' table if it doesn't already exist.
         """
-        c = self.conn.cursor()
-        c.execute('''
+        query = '''
             CREATE TABLE IF NOT EXISTS updates (
                 id INT AUTO_INCREMENT PRIMARY KEY,
                 discord_id BIGINT,
@@ -32,9 +31,9 @@ class UpdatesDB(BaseDB):
                 summarized_status TEXT,
                 timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (discord_id) REFERENCES team_members(discord_id) ON DELETE CASCADE
-            );
-        ''')
-        self.conn.commit()
+            )
+        '''
+        self.execute_query(query)
 
     def insert_status(self, discord_id: int, status: str):
         """
@@ -43,10 +42,9 @@ class UpdatesDB(BaseDB):
         :param discord_id: The Discord ID of the team member.
         :param status: The status update.
         """
-        c = self.conn.cursor()
-        c.execute("INSERT INTO updates (discord_id, status) VALUES (%s, %s)",
-                  (discord_id, status))
-        self.conn.commit()
+        query = "INSERT INTO updates (discord_id, status) VALUES (%s, %s)"
+        params = (discord_id, status)
+        self.execute_query(query, params)
 
     def update_summarized_status(self, discord_id: int, summarized_status: str):
         """
@@ -55,15 +53,15 @@ class UpdatesDB(BaseDB):
         :param discord_id: The Discord ID of the team member.
         :param summarized_status: The summarized status update.
         """
-        c = self.conn.cursor()
-        c.execute("""
+        query = """
             UPDATE updates
             SET summarized_status = %s
             WHERE discord_id = %s
             ORDER BY timestamp DESC
             LIMIT 1
-        """, (summarized_status, discord_id))
-        self.conn.commit()
+        """
+        params = (summarized_status, discord_id)
+        self.execute_query(query, params)
 
     def get_all_statuses(self) -> List[Tuple[int, str, str]]:
         """
@@ -71,6 +69,11 @@ class UpdatesDB(BaseDB):
 
         :return: List of tuples containing Discord ID, status, and timestamp.
         """
+        query = "SELECT discord_id, status, timestamp FROM updates"
+        if not self.conn.is_connected():
+            print("Reconnecting to MySQL")
+            self.connect()
+
         c = self.conn.cursor()
-        c.execute("SELECT discord_id, status, timestamp FROM updates")
+        c.execute(query)
         return c.fetchall()

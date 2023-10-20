@@ -23,15 +23,14 @@ class StreaksDB(BaseDB):
         """
         Creates the 'streaks' table if it doesn't already exist.
         """
-        c = self.conn.cursor()
-        c.execute('''
+        query = '''
             CREATE TABLE IF NOT EXISTS streaks (
                 discord_id BIGINT PRIMARY KEY,
                 current_streak INT DEFAULT 0,
                 FOREIGN KEY (discord_id) REFERENCES team_members(discord_id) ON DELETE CASCADE
             );
-        ''')
-        self.conn.commit()
+        '''
+        self.execute_query(query)
 
     def update_streak(self, discord_id: int, new_streak: int):
         """
@@ -40,13 +39,13 @@ class StreaksDB(BaseDB):
         :param discord_id: The Discord ID of the user.
         :param new_streak: The new streak count.
         """
-        c = self.conn.cursor()
-        c.execute("""
+        query = """
             INSERT INTO streaks (discord_id, current_streak)
             VALUES (%s, %s)
             ON DUPLICATE KEY UPDATE current_streak = %s
-        """, (discord_id, new_streak, new_streak))
-        self.conn.commit()
+        """
+        params = (discord_id, new_streak, new_streak)
+        self.execute_query(query, params)
 
     def get_streak(self, discord_id: int) -> int:
         """
@@ -55,7 +54,13 @@ class StreaksDB(BaseDB):
         :param discord_id: The Discord ID of the user.
         :return: The current streak count.
         """
+        if not self.conn.is_connected():
+            print("Reconnecting to MySQL")
+            self.connect()
+
         c = self.conn.cursor()
-        c.execute("SELECT current_streak FROM streaks WHERE discord_id = %s", (discord_id,))
+        query = "SELECT current_streak FROM streaks WHERE discord_id = %s"
+        params = (discord_id,)
+        c.execute(query, params)
         row = c.fetchone()
         return row[0] if row else 0

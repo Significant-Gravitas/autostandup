@@ -1,5 +1,6 @@
 import datetime
 from typing import Optional, Dict
+from mysql.connector import errors
 from base_db import BaseDB
 
 class WeeklyPostsDB(BaseDB):
@@ -25,14 +26,13 @@ class WeeklyPostsDB(BaseDB):
         """
         Creates the 'weekly_posts' table if it doesn't already exist.
         """
-        c = self.conn.cursor()
-        c.execute('''
+        query = '''
             CREATE TABLE IF NOT EXISTS weekly_posts (
                 post_id BIGINT PRIMARY KEY,
                 timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
-        ''')
-        self.conn.commit()
+        '''
+        self.execute_query(query)
 
     def get_weekly_post_data(self) -> Optional[Dict[str, datetime.datetime]]:
         """
@@ -40,10 +40,19 @@ class WeeklyPostsDB(BaseDB):
 
         :return: A dictionary containing the post ID and timestamp, or None if no data exists.
         """
+        query = "SELECT post_id, timestamp FROM weekly_posts LIMIT 1"
+        
+        if not self.conn.is_connected():
+            print("Reconnecting to MySQL")
+            self.connect()
+
         c = self.conn.cursor()
-        c.execute("SELECT post_id, timestamp FROM weekly_posts LIMIT 1")
+        c.execute(query)
         row = c.fetchone()
-        return {'post_id': row[0], 'timestamp': row[1]} if row else None
+
+        if row:
+            return {'post_id': row[0], 'timestamp': row[1]}
+        return None
 
     def save_weekly_post_data(self, post_id: int, timestamp: datetime.datetime):
         """
@@ -52,10 +61,10 @@ class WeeklyPostsDB(BaseDB):
         :param post_id: The ID of the weekly post.
         :param timestamp: The timestamp of the weekly post.
         """
-        c = self.conn.cursor()
-        c.execute("""
+        query = """
             INSERT INTO weekly_posts (post_id, timestamp)
             VALUES (%s, %s)
             ON DUPLICATE KEY UPDATE timestamp = %s
-        """, (post_id, timestamp, timestamp))
-        self.conn.commit()
+        """
+        params = (post_id, timestamp, timestamp)
+        self.execute_query(query, params)
