@@ -24,6 +24,7 @@ from discord import Intents, DMChannel
 
 from flask import Flask
 import openai
+from asyncio import Task, ensure_future, CancelledError
 
 app = Flask(__name__)
 
@@ -57,6 +58,7 @@ weekly_post_manager = None
 team_member_manager = None
 updates_manager = None
 scheduler = None
+ongoing_status_requests = {}
 
 # Define a loop that runs every 30 minutes to check if a new weekly post should be created
 @tasks.loop(minutes=30)
@@ -90,6 +92,11 @@ async def send_status_request(member: TeamMember, weekly_post_manager: WeeklyPos
 
     user = bot.get_user(member.discord_id)
     if user:
+        # Cancel the previous wait_for task if it exists
+        ongoing_task: Task = ongoing_status_requests.get(member.discord_id)
+        if ongoing_task:
+            ongoing_task.cancel()
+
         await user.send(
             f"# Good morning {member.name}, time for your daily status update!\n"
             f"## Please include in a single message:\n"
@@ -100,8 +107,16 @@ async def send_status_request(member: TeamMember, weekly_post_manager: WeeklyPos
 
         def check(m) -> bool:
             return m.author == user and isinstance(m.channel, DMChannel)
-            
-        msg = await bot.wait_for('message', check=check)
+        
+        # Store the new wait_for task in the global dictionary
+        ongoing_task = ensure_future(bot.wait_for('message', check=check))
+        ongoing_status_requests[member.discord_id] = ongoing_task
+        
+        try:
+            msg = await ongoing_task
+            ongoing_status_requests.pop(member.discord_id, None)
+        except CancelledError:
+            return  # If the task is cancelled, do nothing
 
         # Insert the status update into the database
         updates_manager.insert_status(member.discord_id, msg.content)
