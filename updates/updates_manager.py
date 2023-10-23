@@ -35,11 +35,15 @@ class UpdatesManager:
         """
         self.updates_db.update_summarized_status(discord_id, summarized_status)
 
-    def get_all_statuses(self) -> List[Tuple[int, str, str]]:
+    def get_weekly_checkins_count(self, discord_id: int, time_zone: str) -> int:
         """
-        Fetches all status updates.
+        Fetches the number of check-ins for a given user in the current week.
+
+        Args:
+            discord_id: The Discord ID of the user.
+            time_zone: The time zone of the user.
 
         Returns:
-            List of tuples containing Discord ID, status, and timestamp.
+            The count of check-ins in the current week.
         """
-        return self.updates_db.get_all_statuses()
+        return self.updates_db.get_weekly_checkins_count(discord_id, time_zone)

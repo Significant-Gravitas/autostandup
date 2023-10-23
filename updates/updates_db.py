@@ -1,4 +1,7 @@
+import datetime
 from typing import List, Tuple
+
+import pytz
 from base_db import BaseDB
 
 class UpdatesDB(BaseDB):
@@ -62,18 +65,35 @@ class UpdatesDB(BaseDB):
         """
         params = (summarized_status, discord_id)
         self.execute_query(query, params)
-
-    def get_all_statuses(self) -> List[Tuple[int, str, str]]:
+        
+    def get_weekly_checkins_count(self, discord_id: int, time_zone: str) -> int:
         """
-        Fetches all status updates from the 'updates' table.
+        Fetches the number of check-ins for a given user in the current week.
 
-        :return: List of tuples containing Discord ID, status, and timestamp.
+        :param discord_id: The Discord ID of the user.
+        :param time_zone: The time zone of the user.
+        :return: The count of check-ins in the current week.
         """
-        query = "SELECT discord_id, status, timestamp FROM updates"
         if not self.conn.is_connected():
             print("Reconnecting to MySQL")
             self.connect()
 
         c = self.conn.cursor()
-        c.execute(query)
-        return c.fetchall()
+        
+        # Adjusting the current time to the user's time zone
+        local_tz = pytz.timezone(time_zone)
+        local_now = datetime.now(local_tz)
+        
+        # Getting the Monday of the current week in the user's time zone
+        monday = local_now - datetime.timedelta(days=local_now.weekday())
+        monday = local_now.replace(hour=0, minute=0, second=0, microsecond=0)  # set time to 00:00:00 for accurate comparison
+
+        query = """
+            SELECT COUNT(*) FROM updates
+            WHERE discord_id = %s AND timestamp >= %s
+        """
+        params = (discord_id, monday)
+        c.execute(query, params)
+        
+        row = c.fetchone()
+        return row[0] if row else 0
