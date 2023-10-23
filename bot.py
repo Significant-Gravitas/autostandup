@@ -102,8 +102,8 @@ async def send_status_request(member: TeamMember, weekly_post_manager: WeeklyPos
         await user.send(
             f"# Good morning {member.name}, time for your daily status update!\n"
             f"## Please include in a single message:\n"
-            f"### What you accomplished yesterday.\n"
-            f"### What you plan to work on today.\n"
+            f"### What work-related tasks you accomplished yesterday.\n"
+            f"### What work-related tasks you plan to work on today.\n"
             f"### **(Note: We're currently only processing the first message you send back. Multi-message updates are coming soon!)**"
         )
 
