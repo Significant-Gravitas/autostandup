@@ -37,6 +37,15 @@ class TeamMember:
     def reset_streak(self) -> None:
         """Reset the current streak of the team member to 0."""
         self.current_streak = 0
+
+    def update_weekly_checkins(self, count: int):
+        """
+        Update the weekly check-ins count.
+
+        Args:
+            count: The new count of weekly check-ins.
+        """
+        self.weekly_checkins = count
     
     def increment_weekly_checkins(self) -> None:
         """Increment the number of check-ins for the current week by 1."""

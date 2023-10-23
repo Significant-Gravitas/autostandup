@@ -243,6 +243,11 @@ async def on_ready():
     team_member_manager = TeamMemberManager(team_member_db)
     team_members = team_member_manager.load_team_members()
 
+    # Update each team member's streak from the database
+    for member in team_members:
+        member.update_streak(streaks_manager.get_streak(member.discord_id))
+        member.update_weekly_checkins(updates_manager.get_weekly_checkins_count(member.discord_id, member.time_zone))
+
     global weekly_post_manager
     
     weekly_post_manager = WeeklyPostManager(channel, team_members, streaks_manager, weekly_posts_db)
