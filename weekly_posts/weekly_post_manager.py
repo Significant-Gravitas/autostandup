@@ -67,9 +67,8 @@ class WeeklyPostManager:
         # Add streaks to the member list
         member_list = []
         for m in self.team_members:
-            streak = self.streaks_manager.get_streak(m.discord_id)  # Fetch the streak from the database
-            day_suffix = "day" if streak == 1 else "days"  # Choose the appropriate suffix
-            member_list.append(f"# `{m.name.ljust(self.max_name_length)} {'❓' * 5} (Streak: {streak} {day_suffix})`")
+            day_suffix = "day" if m.current_streak == 1 else "days"  # Choose the appropriate suffix
+            member_list.append(f"# `{m.name.ljust(self.max_name_length)} {'❓' * 5} (Streak: {m.current_streak} {day_suffix})`")
 
         member_list_str = '\n'.join(member_list)
 
@@ -115,26 +114,6 @@ class WeeklyPostManager:
         # Update the weekly post
         self.editable_weekly_post = await self.editable_weekly_post.edit(content=new_content)
 
-
-    def has_all_checkmarks(self, member: TeamMember) -> bool:
-        """
-        Checks if a team member has all checkmarks (✅) in their status.
-
-        Args:
-            member: The TeamMember object to check.
-
-        Returns:
-            True if all checkmarks are present, False otherwise.
-        """
-        name_index = self.editable_weekly_post.content.find(member.name)
-        if name_index == -1:
-            return False  # Name not found, do nothing
-
-        start_index = name_index + self.max_name_length + 1
-        existing_line = self.editable_weekly_post.content[start_index:start_index + 5]
-        
-        return all([char == "✅" for char in existing_line])
-
     def format_date(self, dt: datetime) -> str:
         """
         Formats a datetime object into a human-readable string.
@@ -153,30 +132,6 @@ class WeeklyPostManager:
             suffix_index = day % 10  # use 'st', 'nd', 'rd' as appropriate
 
         return dt.strftime(f"%B {day}{suffix[suffix_index]}")
-
-    def has_minimum_checkmarks(self, member: TeamMember, n: int) -> bool:
-        """
-        Checks if a team member has at least n checkmarks (✅) in their status.
-
-        This method scans the status line for the given team member in the weekly
-        Discord post and counts the number of checkmarks. It returns True if the
-        count is at least n, otherwise False.
-
-        Args:
-            member (TeamMember): The TeamMember object to check.
-            n (int): The minimum number of checkmarks required.
-
-        Returns:
-            bool: True if at least n checkmarks are present, False otherwise.
-        """
-        name_index = self.editable_weekly_post.content.find(member.name)
-        if name_index == -1:
-            return False  # Name not found, do nothing
-
-        start_index = name_index + self.max_name_length + 1
-        existing_line = self.editable_weekly_post.content[start_index:start_index + 5]
-
-        return existing_line.count("✅") >= n
 
     async def rebuild_post(self):
         """

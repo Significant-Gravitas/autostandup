@@ -80,15 +80,17 @@ async def check_weekly_post(weekly_post_manager: WeeklyPostManager, streaks_mana
 
         # Reset streaks for the previous week
         for member in team_members:
-            if not weekly_post_manager.has_minimum_checkmarks(member, 5):
+            if member.weekly_checkins < 5:
                 streaks_manager.reset_streak(member.discord_id)
+                member.reset_streak()
+            member.reset_weekly_checkins()
         
         # Initialize new weekly post
         await weekly_post_manager.initialize_post()
 
 async def send_status_request(member: TeamMember, weekly_post_manager: WeeklyPostManager, streaks_manager: StreaksManager, updates_manager: UpdatesManager):
-    if weekly_post_manager.has_all_checkmarks(member):
-        return  # If all checkmarks are present, do nothing
+    if member.weekly_checkins == 5:
+        return  # If already completed 5 check ins, do nothing
 
     user = bot.get_user(member.discord_id)
     if user:
@@ -124,6 +126,8 @@ async def send_status_request(member: TeamMember, weekly_post_manager: WeeklyPos
         # Update the streak for this member
         streak = streaks_manager.get_streak(member.discord_id)
         streaks_manager.update_streak(member.discord_id, streak + 1)
+        member.update_streak(streaks_manager.get_streak(member.discord_id))
+        member.increment_weekly_checkins()
 
         # Update the Discord post using WeeklyPostManager
         await weekly_post_manager.update_post(member)
