@@ -1,22 +1,18 @@
 from datetime import datetime, timedelta
 import pytz
 from typing import List
-from streaks.streaks_manager import StreaksManager
 from weekly_posts.weekly_posts_db import WeeklyPostsDB
 from team_members.team_member import TeamMember
 
 class WeeklyPostManager:
     """Manages the status post in a Discord channel."""
     
-    def __init__(self, channel, team_members: List[TeamMember], streaks_manager: StreaksManager, weekly_posts_db: WeeklyPostsDB):
+    def __init__(self, channel, weekly_posts_db: WeeklyPostsDB):
         """
         Initializes a new WeeklyPostManager instance.
         """
         self.channel = channel
-        self.team_members = team_members
-        self.streaks_manager = streaks_manager
         self.weekly_posts_db = weekly_posts_db
-        self.max_name_length = max((len(m.name) for m in team_members), default=0)
         self.editable_weekly_post = None
         self.load_weekly_post_data()
 
@@ -40,13 +36,16 @@ class WeeklyPostManager:
         """
         self.weekly_posts_db.save_weekly_post_data(self.editable_weekly_post.id, datetime.now())
 
-    async def initialize_post(self):
+    async def initialize_post(self, team_members: List[TeamMember]):
         """
         Initializes or retrieves the weekly status post on Discord.
 
         This function checks if a valid weekly post already exists for the current week.
         If it does, it retrieves that post. Otherwise, it sends a new message in the Discord
         channel with the list of team members and their statuses.
+
+        Args:
+            team_members: A list of TeamMember objects to be displayed in the post.
         """
         current_week_number = datetime.now().isocalendar()[1]
         saved_week_number = self.weekly_post_timestamp.isocalendar()[1] if self.weekly_post_timestamp else None
@@ -55,7 +54,7 @@ class WeeklyPostManager:
         if self.editable_weekly_post_id and current_week_number == saved_week_number:
             self.editable_weekly_post = await self.channel.fetch_message(self.editable_weekly_post_id)
             return
-        
+
         utc_now = pytz.utc.localize(datetime.utcnow())
         today_weekday = utc_now.weekday()
         last_monday = utc_now - timedelta(days=today_weekday)
@@ -64,11 +63,17 @@ class WeeklyPostManager:
         start_date = self.format_date(last_monday)
         end_date = self.format_date(next_sunday)
 
-        # Add streaks to the member list
+        # Calculate the max name length for alignment purposes
+        max_name_length = max([len(m.name) for m in team_members])
+
         member_list = []
-        for m in self.team_members:
-            day_suffix = "day" if m.current_streak == 1 else "days"  # Choose the appropriate suffix
-            member_list.append(f"# `{m.name.ljust(self.max_name_length)} {'❓' * 5} (Streak: {m.current_streak} {day_suffix})`")
+        for m in team_members:
+            # Include the streak with the fire emoji if the streak is greater than 0
+            streak_str = f" {m.current_streak}🔥" if m.current_streak > 0 else ""
+
+            # Construct the new line for the member with the updated information
+            new_line = f"# `{m.name.ljust(max_name_length)} {'❓' * 5} {streak_str}`"
+            member_list.append(new_line)
 
         member_list_str = '\n'.join(member_list)
 
@@ -78,41 +83,49 @@ class WeeklyPostManager:
             self.editable_weekly_post = await self.channel.send(f"{member_list_str}")
             self.save_weekly_post_data()  # Save the ID and timestamp after creating the post
 
+    async def rebuild_post(self, team_members: List[TeamMember]):
+        """
+        Rebuilds the entire weekly status post from the team members' data.
 
-    async def update_post(self, member: TeamMember):
-        # Split the content into lines and find the line related to this member
-        lines = self.editable_weekly_post.content.split('\n')
-        line_to_edit = next((line for line in lines if member.name in line), None)
+        Args:
+            team_members: A list of TeamMember objects with updated statuses and streaks.
+        """
+        # If there are no team members, delete the post and return
+        if not team_members:
+            if self.editable_weekly_post:
+                await self.editable_weekly_post.delete()
+            self.editable_weekly_post = None
+            return
 
-        if line_to_edit is None:
-            return  # Name not found, do nothing
-        
-        # Remove the '#' and trim spaces
-        line_to_edit = line_to_edit.replace("#", "").strip()
+        # Calculate the max name length for alignment purposes
+        max_name_length = max([len(m.name) for m in team_members])
 
-        # Extract the checkmarks/question marks and streak information
-        name_end = line_to_edit.find(' ')
-        marks_streak = line_to_edit[name_end:].strip()
+        member_list = []
+        for m in team_members:
+            # Get the streak and number of weekly check-ins for the member
+            streak = m.current_streak
+            check_ins = m.weekly_checkins
 
-        # Update the first question mark to a checkmark
-        first_question_mark = marks_streak.find("❓")
-        if first_question_mark == -1:
-            return  # No question marks left, do nothing
+            # Generate the marks based on the number of check-ins
+            marks = "✅" * check_ins + "❓" * (5 - check_ins)
 
-        new_marks_streak = marks_streak[:first_question_mark] + "✅" + marks_streak[first_question_mark + 1:]
+            # Include the streak with the fire emoji if the streak is greater than 0
+            streak_str = f" {streak}🔥" if streak > 0 else ""
 
-        # Update the streak count
-        new_streak = self.streaks_manager.get_streak(member.discord_id)
-        new_streak_str = f"(Streak: {new_streak} {'day' if new_streak == 1 else 'days'})"
+            # Construct the new line for the member with the updated information
+            new_line = f"# `{m.name.ljust(max_name_length)} {marks} {streak_str}`"
+            member_list.append(new_line)
 
-        # Reconstruct the new line for this member
-        new_line = f"`{member.name.ljust(self.max_name_length)} {new_marks_streak.split('(')[0].strip()} {new_streak_str}`"
+        new_content = '\n'.join(member_list)
 
-        # Replace the old line with the new line in the content
-        new_content = self.editable_weekly_post.content.replace(line_to_edit, new_line)
+        # Update the existing post or create a new one if it doesn't exist
+        if self.editable_weekly_post:
+            self.editable_weekly_post = await self.editable_weekly_post.edit(content=new_content)
+        else:
+            self.editable_weekly_post = await self.channel.send(new_content)
 
-        # Update the weekly post
-        self.editable_weekly_post = await self.editable_weekly_post.edit(content=new_content)
+        # Save the ID and timestamp of the post
+        self.save_weekly_post_data()
 
     def format_date(self, dt: datetime) -> str:
         """
@@ -132,100 +145,3 @@ class WeeklyPostManager:
             suffix_index = day % 10  # use 'st', 'nd', 'rd' as appropriate
 
         return dt.strftime(f"%B {day}{suffix[suffix_index]}")
-
-    async def rebuild_post(self):
-        """
-        Rebuilds the weekly status post with updated team members and alignment.
-
-        This function regenerates the entire status post to make sure the alignment and check marks
-        are correctly displayed for each team member. It also handles edge cases like adding the first
-        member and removing the last one.
-
-        Returns:
-            None
-        """
-        # If there are team members but no editable post yet, create one for the first member
-        if self.team_members and self.editable_weekly_post is None:
-            first_member = self.team_members[0]
-            streak = self.streaks_manager.get_streak(first_member.discord_id)
-            day_suffix = "day" if streak == 1 else "days"
-            initial_content = f"# `{first_member.name.ljust(self.max_name_length)} {'❓' * 5} (Streak: {streak} {day_suffix})`"
-            self.editable_weekly_post = await self.channel.send(initial_content)
-            self.save_weekly_post_data()
-            return
-
-        # If no team members are left, delete the post and return
-        if not self.team_members:
-            if self.editable_weekly_post:
-                await self.editable_weekly_post.delete()
-            self.editable_weekly_post = None
-            return
-        
-        member_list = []
-        for m in self.team_members:
-            # Extract the line related to this member
-            lines = self.editable_weekly_post.content.split('\n')
-            member_line = next((line for line in lines if m.name in line), None)
-            
-            # Default to five question marks
-            existing_marks = "❓❓❓❓❓"
-
-            if member_line:
-                first_checkmark = member_line.find("✅")
-                first_question_mark = member_line.find("❓")
-                
-                # Look for existing checkmarks
-                if first_checkmark != -1:
-                    existing_marks = member_line[first_checkmark:first_checkmark + 5]
-                
-                # If no checkmarks, look for existing question marks
-                elif first_question_mark != -1:
-                    existing_marks = member_line[first_question_mark:first_question_mark + 5]
-            
-            # Fetch the streak from the database
-            streak = self.streaks_manager.get_streak(m.discord_id)
-            day_suffix = "day" if streak == 1 else "days"
-            
-            # Create the new line for the member
-            new_line = f"# `{m.name.ljust(self.max_name_length)} {existing_marks} (Streak: {streak} {day_suffix})`"
-            member_list.append(new_line)
-        
-        # Combine the lines into a single string
-        new_content = '\n'.join(member_list)
-
-        self.editable_weekly_post = await self.editable_weekly_post.edit(content=new_content)
-
-    async def add_member_to_post(self, member: TeamMember):
-        """
-        Adds a new member to the editable weekly post and rebuilds it.
-
-        Args:
-            member (TeamMember): The new member to be added.
-
-        Returns:
-            None
-        """
-        # Add the new member and update max_name_length
-        self.team_members.append(member)
-        self.max_name_length = max([len(m.name) for m in self.team_members])
-        
-        # Rebuild the post to reflect the changes
-        await self.rebuild_post()
-
-    async def remove_member_from_post(self, member: TeamMember):
-        """
-        Removes a member from the editable weekly post and rebuilds it.
-
-        Args:
-            member (TeamMember): The member to be removed.
-
-        Returns:
-            None
-        """
-        # Remove the member and update max_name_length
-        self.team_members = [m for m in self.team_members if m.discord_id != member.discord_id]
-        self.max_name_length = max([len(m.name) for m in self.team_members]) if self.team_members else 0
-        
-        # Rebuild the post to reflect the changes
-        await self.rebuild_post()
-

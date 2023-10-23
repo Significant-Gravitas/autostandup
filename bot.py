@@ -70,7 +70,7 @@ async def check_weekly_post(weekly_post_manager: WeeklyPostManager, streaks_mana
         tz = pytz.timezone(member.time_zone)
         local_time = datetime.now(tz)
         
-        if local_time.weekday() == 0 and local_time.hour >= 9:
+        if local_time.weekday() == 0 and local_time.hour >= 9 and local_time.minute >= 15:
             if earliest_time is None or local_time < earliest_time:
                 earliest_time = local_time
                 earliest_time_zone = member.time_zone
@@ -86,7 +86,7 @@ async def check_weekly_post(weekly_post_manager: WeeklyPostManager, streaks_mana
             member.reset_weekly_checkins()
         
         # Initialize new weekly post
-        await weekly_post_manager.initialize_post()
+        await weekly_post_manager.initialize_post(team_members)
 
 async def send_status_request(member: TeamMember, weekly_post_manager: WeeklyPostManager, streaks_manager: StreaksManager, updates_manager: UpdatesManager):
     if member.weekly_checkins == 5:
@@ -130,7 +130,8 @@ async def send_status_request(member: TeamMember, weekly_post_manager: WeeklyPos
         member.increment_weekly_checkins()
 
         # Update the Discord post using WeeklyPostManager
-        await weekly_post_manager.update_post(member)
+        team_members = team_member_manager.load_team_members()
+        await weekly_post_manager.rebuild_post(team_members)
 
         # Prepare a system message to guide OpenAI's model
         system_message = "Please summarize the user's update into two sections: 'Did' for tasks completed yesterday and 'Do' for tasks planned for today."
@@ -190,7 +191,8 @@ async def add_user(ctx, discord_id: int, time_zone: str, name: str):
     # Update the weekly post to include the new member
     new_member = team_member_manager.find_member(discord_id)
     if new_member:
-        await weekly_post_manager.add_member_to_post(new_member)
+        team_members = team_member_manager.load_team_members()
+        await weekly_post_manager.rebuild_post(team_members)
         scheduler.add_job(send_status_request, new_member, weekly_post_manager, streaks_manager, updates_manager) 
     
     await ctx.send(f"User {name} added successfully.")
@@ -209,7 +211,8 @@ async def remove_user(ctx, discord_id: int):
         team_member_manager.remove_member(discord_id)
         
         # Update the weekly post to remove the member
-        await weekly_post_manager.remove_member_from_post(member_to_remove)
+        team_members = team_member_manager.load_team_members()
+        await weekly_post_manager.rebuild_post(team_members)
         scheduler.remove_job(discord_id)
 
         await ctx.send(f"User with Discord ID {discord_id} removed successfully.")
@@ -260,9 +263,10 @@ async def on_ready():
 
     global weekly_post_manager
     
-    weekly_post_manager = WeeklyPostManager(channel, team_members, streaks_manager, weekly_posts_db)
+    weekly_post_manager = WeeklyPostManager(channel, weekly_posts_db)
     # Initialize new weekly post
-    await weekly_post_manager.initialize_post()
+    await weekly_post_manager.initialize_post(team_members)
+    await weekly_post_manager.rebuild_post(team_members)
 
     check_weekly_post.start(weekly_post_manager, streaks_manager, team_members)
 
