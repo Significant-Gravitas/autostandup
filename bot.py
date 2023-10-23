@@ -58,15 +58,6 @@ team_member_manager = None
 updates_manager = None
 scheduler = None
 
-# Define a loop that runs every 48 hours to ping for status updates
-@tasks.loop(hours=48)
-async def ping_for_status() -> None:
-    # Get the guild (server) and channel using their IDs
-    guild = bot.get_guild(GUILD_TOKEN)
-    channel = guild.get_channel(CHANNEL_TOKEN)
-    # Send a message to the channel to ping everyone for a status update
-    await channel.send("Hey @everyone, time for a status update! Please share what you've been working on.")
-
 # Define a loop that runs every 30 minutes to check if a new weekly post should be created
 @tasks.loop(minutes=30)
 async def check_weekly_post(weekly_post_manager: WeeklyPostManager, streaks_manager: StreaksManager, team_members: List[TeamMember]):
