@@ -70,7 +70,7 @@ async def check_weekly_post(weekly_post_manager: WeeklyPostManager, streaks_mana
         tz = pytz.timezone(member.time_zone)
         local_time = datetime.now(tz)
         
-        if local_time.weekday() == 0 and local_time.hour >= 9 and local_time.minute >= 15:
+        if local_time.weekday() == 0 and local_time.hour >= 9 and local_time.minute >= 45:
             if earliest_time is None or local_time < earliest_time:
                 earliest_time = local_time
                 earliest_time_zone = member.time_zone
@@ -130,8 +130,7 @@ async def send_status_request(member: TeamMember, weekly_post_manager: WeeklyPos
         member.increment_weekly_checkins()
 
         # Update the Discord post using WeeklyPostManager
-        team_members = team_member_manager.load_team_members()
-        await weekly_post_manager.rebuild_post(team_members)
+        await weekly_post_manager.rebuild_post(team_member_manager.team_members)
 
         # Prepare a system message to guide OpenAI's model
         system_message = "Please summarize the user's update into two sections: 'Did' for tasks completed yesterday and 'Do' for tasks planned for today."
@@ -191,8 +190,7 @@ async def add_user(ctx, discord_id: int, time_zone: str, name: str):
     # Update the weekly post to include the new member
     new_member = team_member_manager.find_member(discord_id)
     if new_member:
-        team_members = team_member_manager.load_team_members()
-        await weekly_post_manager.rebuild_post(team_members)
+        await weekly_post_manager.rebuild_post(team_member_manager.team_members)
         scheduler.add_job(send_status_request, new_member, weekly_post_manager, streaks_manager, updates_manager) 
     
     await ctx.send(f"User {name} added successfully.")
@@ -211,8 +209,7 @@ async def remove_user(ctx, discord_id: int):
         team_member_manager.remove_member(discord_id)
         
         # Update the weekly post to remove the member
-        team_members = team_member_manager.load_team_members()
-        await weekly_post_manager.rebuild_post(team_members)
+        await weekly_post_manager.rebuild_post(team_member_manager.team_members)
         scheduler.remove_job(discord_id)
 
         await ctx.send(f"User with Discord ID {discord_id} removed successfully.")
@@ -226,10 +223,42 @@ async def list_users(ctx):
         return
 
     # List users using team_member_manager
-    users = [(member.discord_id, member.name, member.time_zone) for member in team_member_manager.team_members]
-    user_list = '\n'.join([f"Name: {user[1]}, Discord ID: {user[0]}, Time Zone: {user[2]}" for user in users])
+    users = [(member.discord_id, member.name, member.time_zone, member.current_streak) for member in team_member_manager.team_members]
+    user_list = '\n'.join([f"Name: {user[1]}, Discord ID: {user[0]}, Time Zone: {user[2]}, Current Streak: {user[3]}" for user in users])
 
     await ctx.send(f"List of users:\n{user_list}")
+
+@bot.command(name='updatestreak')
+async def update_streak(ctx, discord_id: int, new_streak: int):
+    if ctx.message.author.id != ADMIN_DISCORD_ID or not isinstance(ctx.channel, DMChannel):
+        await ctx.send("You're not authorized to update streaks.")
+        return
+
+    # Find the member object using the Discord ID
+    member_to_update = team_member_manager.find_member(discord_id)
+
+    if member_to_update:
+        # Update the streak in the database
+        streaks_manager.update_streak(discord_id, new_streak)
+        member_to_update.update_streak(new_streak)
+
+        # Update the Discord post using WeeklyPostManager
+        await weekly_post_manager.rebuild_post(team_member_manager.team_members)
+        
+        await ctx.send(f"Streak for user with Discord ID {discord_id} updated to {new_streak}.")
+    else:
+        await ctx.send(f"No user with Discord ID {discord_id} found.")
+
+@bot.command(name='forcepostrebuild')
+async def force_post_rebuild(ctx):
+    if ctx.message.author.id != ADMIN_DISCORD_ID or not isinstance(ctx.channel, DMChannel):
+        await ctx.send("You're not authorized to force a post rebuild.")
+        return
+
+    # Rebuild the post
+    await weekly_post_manager.rebuild_post(team_member_manager.team_members)
+
+    await ctx.send("Post rebuilt successfully.")
 
 @bot.event
 async def on_ready():
@@ -254,10 +283,9 @@ async def on_ready():
     global team_member_manager
 
     team_member_manager = TeamMemberManager(team_member_db)
-    team_members = team_member_manager.load_team_members()
 
     # Update each team member's streak from the database
-    for member in team_members:
+    for member in team_member_manager.team_members:
         member.update_streak(streaks_manager.get_streak(member.discord_id))
         member.update_weekly_checkins(updates_manager.get_weekly_checkins_count(member.discord_id, member.time_zone))
 
@@ -265,15 +293,15 @@ async def on_ready():
     
     weekly_post_manager = WeeklyPostManager(channel, weekly_posts_db)
     # Initialize new weekly post
-    await weekly_post_manager.initialize_post(team_members)
-    await weekly_post_manager.rebuild_post(team_members)
+    await weekly_post_manager.initialize_post(team_member_manager.team_members)
+    await weekly_post_manager.rebuild_post(team_member_manager.team_members)
 
-    check_weekly_post.start(weekly_post_manager, streaks_manager, team_members)
+    check_weekly_post.start(weekly_post_manager, streaks_manager, team_member_manager.team_members)
 
     global scheduler
     scheduler = Scheduler()
     
-    for member in team_members:
+    for member in team_member_manager.team_members:
         scheduler.add_job(send_status_request, member, weekly_post_manager, streaks_manager, updates_manager)
 
 @app.route('/')

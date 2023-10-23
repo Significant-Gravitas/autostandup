@@ -1,5 +1,4 @@
-import datetime
-from typing import List, Tuple
+from datetime import datetime, timedelta
 
 import pytz
 from base_db import BaseDB
@@ -85,7 +84,7 @@ class UpdatesDB(BaseDB):
         local_now = datetime.now(local_tz)
         
         # Getting the Monday of the current week in the user's time zone
-        monday = local_now - datetime.timedelta(days=local_now.weekday())
+        monday = local_now - timedelta(days=local_now.weekday())
         monday = local_now.replace(hour=0, minute=0, second=0, microsecond=0)  # set time to 00:00:00 for accurate comparison
 
         query = """
