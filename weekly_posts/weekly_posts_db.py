@@ -40,7 +40,7 @@ class WeeklyPostsDB(BaseDB):
 
         :return: A dictionary containing the post ID and timestamp, or None if no data exists.
         """
-        query = "SELECT post_id, timestamp FROM weekly_posts LIMIT 1"
+        query = "SELECT post_id, timestamp FROM weekly_posts ORDER BY timestamp DESC LIMIT 1"
         
         if not self.conn.is_connected():
             print("Reconnecting to MySQL")
