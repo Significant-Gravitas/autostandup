@@ -108,7 +108,7 @@ async def send_status_request(member: TeamMember, weekly_post_manager: WeeklyPos
         )
 
         def check(m) -> bool:
-            return m.author == user
+            return m.author == user and isinstance(m.channel, DMChannel)
             
         msg = await bot.wait_for('message', check=check)
 
