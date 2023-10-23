@@ -255,7 +255,7 @@ async def on_ready():
     scheduler = Scheduler()
     
     for member in team_members:
-        scheduler.add_job(send_status_request, member, weekly_post_manager, streaks_manager, updates_manager) 
+        scheduler.add_job(send_status_request, member, weekly_post_manager, streaks_manager, updates_manager)
 
 @app.route('/')
 def index(): 
