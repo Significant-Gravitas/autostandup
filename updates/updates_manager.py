@@ -132,7 +132,7 @@ class UpdatesManager:
         ]
         
         # Specify the model engine you want to use
-        model_engine = "gpt-3.5-turbo-0613"
+        model_engine = "gpt-4-0613"
         
         try:
             # Make an API call to OpenAI's ChatCompletion
