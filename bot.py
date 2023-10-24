@@ -60,34 +60,16 @@ updates_manager = None
 scheduler = None
 ongoing_status_requests = {}
 
-# Define a loop that runs every 30 minutes to check if a new weekly post should be created
-@tasks.loop(minutes=10)
-async def check_weekly_post(weekly_post_manager: WeeklyPostManager, streaks_manager: StreaksManager, team_members: List[TeamMember]):
-    earliest_time_zone = None
-    earliest_time = None
-    
+async def weekly_state_reset(weekly_post_manager: WeeklyPostManager, streaks_manager: StreaksManager, team_members: List[TeamMember]):
+    # Reset streaks for the previous week
     for member in team_members:
-        tz = pytz.timezone(member.time_zone)
-        local_time = datetime.now(tz)
-        
-        if local_time.weekday() == 0 and local_time.hour >= 9 and local_time.minute >= 10:
-            if earliest_time is None or local_time < earliest_time:
-                earliest_time = local_time
-                earliest_time_zone = member.time_zone
-                
-    if earliest_time is not None:
-        print(f"Initializing weekly post based on the earliest time zone: {earliest_time_zone}")
-
-        # TODO: This is resetting our streak when we don't want it to.
-        # Reset streaks for the previous week
-        for member in team_members:
-            if member.weekly_checkins < 5:
-                streaks_manager.reset_streak(member.discord_id)
-                member.reset_streak()
-            member.reset_weekly_checkins()
-        
-        # Initialize new weekly post
-        await weekly_post_manager.initialize_post(team_members)
+        if member.weekly_checkins < 5:
+            streaks_manager.reset_streak(member.discord_id)
+            member.reset_streak()
+        member.reset_weekly_checkins()
+    
+    # Initialize new weekly post
+    await weekly_post_manager.initialize_post(team_members)
 
 async def send_status_request(member: TeamMember, 
                               weekly_post_manager: WeeklyPostManager, 
@@ -177,6 +159,8 @@ async def add_user(ctx, discord_id: int, time_zone: str, name: str):
     if new_member:
         await weekly_post_manager.rebuild_post(team_member_manager.team_members)
         scheduler.add_job(send_status_request, new_member, weekly_post_manager, streaks_manager, updates_manager) 
+        scheduler.unschedule_weekly_post()
+        scheduler.schedule_weekly_post(weekly_state_reset, weekly_post_manager, streaks_manager, team_member_manager.team_members)
     
     await ctx.send(f"User {name} added successfully.")
 
@@ -196,6 +180,8 @@ async def remove_user(ctx, discord_id: int):
         # Update the weekly post to remove the member
         await weekly_post_manager.rebuild_post(team_member_manager.team_members)
         scheduler.remove_job(discord_id)
+        scheduler.unschedule_weekly_post()
+        scheduler.schedule_weekly_post(weekly_state_reset, weekly_post_manager, streaks_manager, team_member_manager.team_members)
 
         await ctx.send(f"User with Discord ID {discord_id} removed successfully.")
     else:
@@ -336,10 +322,10 @@ async def on_ready():
     await weekly_post_manager.initialize_post(team_member_manager.team_members)
     await weekly_post_manager.rebuild_post(team_member_manager.team_members)
 
-    check_weekly_post.start(weekly_post_manager, streaks_manager, team_member_manager.team_members)
-
     global scheduler
     scheduler = Scheduler()
+
+    scheduler.schedule_weekly_post(weekly_state_reset, weekly_post_manager, streaks_manager, team_member_manager.team_members)
     
     for member in team_member_manager.team_members:
         scheduler.add_job(send_status_request, member, weekly_post_manager, streaks_manager, updates_manager)

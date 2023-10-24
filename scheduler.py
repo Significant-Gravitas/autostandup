@@ -6,6 +6,7 @@ from updates.updates_manager import UpdatesManager
 from weekly_posts.weekly_post_manager import WeeklyPostManager
 import pytz
 from typing import Dict, List
+from datetime import datetime
 
 class Scheduler:
     """Scheduler class to manage timed jobs for sending status requests.
@@ -19,6 +20,7 @@ class Scheduler:
         """Initialize the Scheduler object and start the APScheduler."""
         self.scheduler: AsyncIOScheduler = AsyncIOScheduler()
         self.job_ids: Dict[int, List[str]] = {}  # Store job IDs indexed by member's Discord ID
+        self.weekly_post_job_id = None  # To store the ID of the scheduled weekly post job
         self.scheduler.start()
 
     def add_job(self, func: callable, member: TeamMember, weekly_post_manager: WeeklyPostManager, streaks_manager: StreaksManager, updates_manager: UpdatesManager) -> None:
@@ -50,3 +52,22 @@ class Scheduler:
 
         if discord_id in self.job_ids:
             del self.job_ids[discord_id]  # Remove the job IDs from the dictionary
+
+    def schedule_weekly_post(self, func: callable, weekly_post_manager: WeeklyPostManager, streaks_manager: StreaksManager, team_members: List[TeamMember]) -> None:
+        """Schedules the weekly post based on the earliest time zone among the team members."""
+        
+        # Determine the earliest time zone
+        earliest_time_zone = min([member.time_zone for member in team_members], key=lambda tz: datetime.now(pytz.timezone(tz)))
+
+        # Set the trigger for 9:10 AM in the earliest time zone on Monday
+        trigger = CronTrigger(day_of_week='mon', hour=9, minute=10, timezone=earliest_time_zone)
+
+        # Schedule the function with the trigger
+        job = self.scheduler.add_job(func, trigger, args=[weekly_post_manager, streaks_manager, team_members])
+        self.weekly_post_job_id = job.id
+
+    def unschedule_weekly_post(self) -> None:
+        """Removes the weekly post job from the scheduler."""
+        if self.weekly_post_job_id:
+            self.scheduler.remove_job(self.weekly_post_job_id)
+            self.weekly_post_job_id = None
