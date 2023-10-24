@@ -17,7 +17,7 @@ class UpdatesManager:
         """
         self.updates_db = updates_db
 
-    def insert_status(self, discord_id: int, status: str):
+    def insert_status(self, discord_id: int, status: str, time_zone: str):
         """
         Inserts a new status update.
 
@@ -25,7 +25,7 @@ class UpdatesManager:
             discord_id: The Discord ID of the team member.
             status: The status update.
         """
-        self.updates_db.insert_status(discord_id, status)
+        self.updates_db.insert_status(discord_id, status, time_zone)
 
     def update_summarized_status(self, discord_id: int, summarized_status: str):
         """

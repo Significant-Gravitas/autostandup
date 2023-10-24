@@ -32,20 +32,26 @@ class UpdatesDB(BaseDB):
                 status TEXT NOT NULL,
                 summarized_status TEXT,
                 timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                time_zone VARCHAR(255),
                 FOREIGN KEY (discord_id) REFERENCES team_members(discord_id) ON DELETE CASCADE
             )
         '''
         self.execute_query(query)
 
-    def insert_status(self, discord_id: int, status: str):
+    def insert_status(self, discord_id: int, status: str, time_zone: str):
         """
         Inserts a new status update into the 'updates' table.
 
         :param discord_id: The Discord ID of the team member.
         :param status: The status update.
+        :param time_zone: The time zone of the user.
         """
-        query = "INSERT INTO updates (discord_id, status) VALUES (%s, %s)"
-        params = (discord_id, status)
+        # Convert current UTC time to user's local time zone
+        utc_now = datetime.utcnow().replace(tzinfo=pytz.utc)
+        local_now = utc_now.astimezone(pytz.timezone(time_zone))
+
+        query = "INSERT INTO updates (discord_id, status, timestamp, time_zone) VALUES (%s, %s, %s, %s)"
+        params = (discord_id, status, local_now, time_zone)
         self.execute_query(query, params)
 
     def update_summarized_status(self, discord_id: int, summarized_status: str):
@@ -85,7 +91,7 @@ class UpdatesDB(BaseDB):
         
         # Getting the Monday of the current week in the user's time zone
         monday = local_now - timedelta(days=local_now.weekday())
-        monday = local_now.replace(hour=0, minute=0, second=0, microsecond=0)  # set time to 00:00:00 for accurate comparison
+        monday = monday.replace(hour=0, minute=0, second=0, microsecond=0)
 
         query = """
             SELECT COUNT(*) FROM updates

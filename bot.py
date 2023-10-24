@@ -61,7 +61,7 @@ scheduler = None
 ongoing_status_requests = {}
 
 # Define a loop that runs every 30 minutes to check if a new weekly post should be created
-@tasks.loop(minutes=30)
+@tasks.loop(minutes=10)
 async def check_weekly_post(weekly_post_manager: WeeklyPostManager, streaks_manager: StreaksManager, team_members: List[TeamMember]):
     earliest_time_zone = None
     earliest_time = None
@@ -70,7 +70,7 @@ async def check_weekly_post(weekly_post_manager: WeeklyPostManager, streaks_mana
         tz = pytz.timezone(member.time_zone)
         local_time = datetime.now(tz)
         
-        if local_time.weekday() == 0 and local_time.hour >= 9 and local_time.minute >= 45:
+        if local_time.weekday() == 0 and local_time.hour >= 9 and local_time.minute >= 10:
             if earliest_time is None or local_time < earliest_time:
                 earliest_time = local_time
                 earliest_time_zone = member.time_zone
@@ -78,6 +78,7 @@ async def check_weekly_post(weekly_post_manager: WeeklyPostManager, streaks_mana
     if earliest_time is not None:
         print(f"Initializing weekly post based on the earliest time zone: {earliest_time_zone}")
 
+        # TODO: This is resetting our streak when we don't want it to.
         # Reset streaks for the previous week
         for member in team_members:
             if member.weekly_checkins < 5:
@@ -124,13 +125,13 @@ async def send_status_request(member: TeamMember,
             return  # If the task is cancelled, do nothing
 
         # Insert the status update into the database
-        updates_manager.insert_status(member.discord_id, msg.content)
+        updates_manager.insert_status(member.discord_id, msg.content, member.time_zone)
 
         # Generate the daily summary using the UpdatesManager's method
         summarized_message = await updates_manager.generate_daily_summary(msg.content)
 
         updates_manager.update_summarized_status(member.discord_id, summarized_message)
-        
+
         # Update the streak for this member
         streak = streaks_manager.get_streak(member.discord_id)
         streaks_manager.update_streak(member.discord_id, streak + 1)
