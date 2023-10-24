@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta
-
 import pytz
+from typing import List, Dict, Any
 from base_db import BaseDB
 
 class UpdatesDB(BaseDB):
@@ -96,3 +96,60 @@ class UpdatesDB(BaseDB):
         
         row = c.fetchone()
         return row[0] if row else 0
+
+    def get_statuses_in_date_range(self, discord_id: int, start_date: datetime, end_date: datetime) -> List[str]:
+        """
+        Fetches all raw status updates for a given user within a specified date range.
+
+        Args:
+            discord_id: The Discord ID of the user.
+            start_date: The start date of the date range.
+            end_date: The end date of the date range.
+
+        Returns:
+            A list of raw status updates.
+        """
+        if not self.conn.is_connected():
+            print("Reconnecting to MySQL")
+            self.connect()
+
+        c = self.conn.cursor()
+        
+        query = """
+            SELECT summarized_status FROM updates
+            WHERE discord_id = %s AND timestamp >= %s AND timestamp <= %s
+        """
+        params = (discord_id, start_date, end_date)
+        c.execute(query, params)
+        
+        statuses = [row[0] for row in c.fetchall()]
+        return statuses
+    
+    def get_all_statuses_for_user(self, discord_id: int) -> List[dict]:
+        """
+        Fetches all status updates (both raw and summarized) for a given user.
+
+        Args:
+            discord_id: The Discord ID of the user.
+
+        Returns:
+            A list of dictionaries, each containing the status update details for a given record.
+        """
+        if not self.conn.is_connected():
+            print("Reconnecting to MySQL")
+            self.connect()
+
+        c = self.conn.cursor(dictionary=True)  # Set dictionary=True to return results as dictionaries
+        
+        query = """
+            SELECT id, discord_id, status, summarized_status, timestamp 
+            FROM updates
+            WHERE discord_id = %s
+            ORDER BY timestamp DESC
+        """
+        params = (discord_id,)
+        c.execute(query, params)
+        
+        statuses = c.fetchall()
+        return statuses
+    

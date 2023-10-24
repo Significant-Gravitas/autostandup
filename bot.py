@@ -88,9 +88,12 @@ async def check_weekly_post(weekly_post_manager: WeeklyPostManager, streaks_mana
         # Initialize new weekly post
         await weekly_post_manager.initialize_post(team_members)
 
-async def send_status_request(member: TeamMember, weekly_post_manager: WeeklyPostManager, streaks_manager: StreaksManager, updates_manager: UpdatesManager):
+async def send_status_request(member: TeamMember, 
+                              weekly_post_manager: WeeklyPostManager, 
+                              streaks_manager: StreaksManager, 
+                              updates_manager: UpdatesManager):
     if member.weekly_checkins == 5:
-        return  # If already completed 5 check ins, do nothing
+        return  # If already completed 5 check-ins, do nothing
 
     user = bot.get_user(member.discord_id)
     if user:
@@ -123,6 +126,11 @@ async def send_status_request(member: TeamMember, weekly_post_manager: WeeklyPos
         # Insert the status update into the database
         updates_manager.insert_status(member.discord_id, msg.content)
 
+        # Generate the daily summary using the UpdatesManager's method
+        summarized_message = await updates_manager.generate_daily_summary(msg.content)
+
+        updates_manager.update_summarized_status(member.discord_id, summarized_message)
+        
         # Update the streak for this member
         streak = streaks_manager.get_streak(member.discord_id)
         streaks_manager.update_streak(member.discord_id, streak + 1)
@@ -131,35 +139,11 @@ async def send_status_request(member: TeamMember, weekly_post_manager: WeeklyPos
 
         # Update the Discord post using WeeklyPostManager
         await weekly_post_manager.rebuild_post(team_member_manager.team_members)
-
-        # Prepare a system message to guide OpenAI's model
-        system_message = "Please summarize the user's update into two sections: 'Did' for tasks completed yesterday and 'Do' for tasks planned for today."
-        
-        # User's message that you want to summarize
-        user_message = msg.content
-        
-        # Prepare the messages input for ChatCompletion
-        messages = [
-            {"role": "system", "content": system_message},
-            {"role": "user", "content": user_message}
-        ]
-        
-        # OpenAI API call using ChatCompletion
-        model_engine = "gpt-3.5-turbo-0613"
-        response = openai.ChatCompletion.create(
-            model=model_engine,
-            messages=messages
-        )
-        
-        # Extract the generated text
-        generated_text = response['choices'][0]['message']['content'].strip()
-
-        updates_manager.update_summarized_status(member.discord_id, generated_text)
         
         # Send the generated summary to a designated Discord channel
         guild = bot.get_guild(GUILD_TOKEN)
         channel_to_post_in = guild.get_channel(CHANNEL_TOKEN)
-        await channel_to_post_in.send(f"**{member.name}'s summary:**\n{generated_text}")
+        await channel_to_post_in.send(f"**{member.name}'s summary:**\n{summarized_message}")
 
 @bot.command(name='statusrequest')
 async def status_request(ctx, discord_id: int):
@@ -259,6 +243,61 @@ async def force_post_rebuild(ctx):
     await weekly_post_manager.rebuild_post(team_member_manager.team_members)
 
     await ctx.send("Post rebuilt successfully.")
+
+@bot.command(name='viewuser')
+async def view_user(ctx, discord_id: int):
+    if ctx.message.author.id != ADMIN_DISCORD_ID or not isinstance(ctx.channel, DMChannel):
+        await ctx.send("You're not authorized to view user data.")
+        return
+
+    # Get the member's statuses using the UpdatesManager's method
+    statuses = updates_manager.get_all_statuses_for_user(discord_id)
+
+    if not statuses:
+        await ctx.send(f"No status updates found for user with Discord ID {discord_id}.")
+        return
+
+    # Loop through the statuses and send individual messages
+    for status in statuses:
+        await ctx.send(f"### **Timestamp:** {status['timestamp']}")
+        await ctx.send(f"### **Raw Status:** {status['status']}")
+        await ctx.send(f"### **Summarized Status:** \n{status['summarized_status']}")
+
+@bot.command(name='weeklysummary')
+async def weekly_summary(ctx, discord_id: int, start_date: str, end_date: str):
+    if ctx.message.author.id != ADMIN_DISCORD_ID or not isinstance(ctx.channel, DMChannel):
+        await ctx.send("You're not authorized to generate weekly summaries.")
+        return
+
+    # Find the member object using the Discord ID
+    member = team_member_manager.find_member(discord_id)
+
+    if not member:
+        await ctx.send(f"No user with Discord ID {discord_id} found.")
+        return
+
+    # Convert the start_date and end_date strings to datetime objects
+    # Adjusting the date format to MM-DD-YYYY and setting the time
+    try:
+        start_date = datetime.strptime(start_date, '%m-%d-%Y')
+        end_date = datetime.strptime(end_date, '%m-%d-%Y')
+
+        # Setting the time to ensure the whole week is captured
+        start_date = start_date.replace(hour=0, minute=0, second=0, microsecond=0)
+        end_date = end_date.replace(hour=23, minute=59, second=59, microsecond=999999)
+    except ValueError:
+        await ctx.send("Invalid date format. Please use MM-DD-YYYY.")
+        return
+
+    # Generate the weekly summary
+    weekly_summary = await updates_manager.generate_weekly_summary(discord_id, start_date, end_date)
+
+    # Send the weekly summary to the admin user
+    admin_user = bot.get_user(ADMIN_DISCORD_ID)
+    if admin_user:
+        await admin_user.send(f"**{member.name}'s Weekly Summary for {start_date.strftime('%m-%d-%Y')} to {end_date.strftime('%m-%d-%Y')}:**\n{weekly_summary}")
+    else:
+        await ctx.send("Unable to find the admin user.")
 
 @bot.event
 async def on_ready():
