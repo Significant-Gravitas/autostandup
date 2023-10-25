@@ -15,7 +15,7 @@ import openai
 import sys
 
 # Initialize the OpenAI API
-openai.api_key = 'YOUR_OPENAI_API_KEY'
+openai.api_key = os.getenv('OPENAI_API_KEY')
 
 def get_staged_diff():
     """Get the git diff of the staged changes in the current repository."""
