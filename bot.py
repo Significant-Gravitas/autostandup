@@ -3,7 +3,7 @@ import os
 import pytz
 from typing import List
 from dotenv import load_dotenv
-from datetime import datetime
+from datetime import datetime, timedelta
 from multiprocessing import Process
 
 from streaks.streaks_db import StreaksDB
@@ -73,12 +73,15 @@ async def weekly_state_reset(weekly_post_manager: WeeklyPostManager, streaks_man
     await weekly_post_manager.initialize_post(team_members)
 
 def get_all_commit_messages_for_user(org_name: str, username: str, token: str) -> list:
-    """Retrieve all commit messages for a user across all repos in an organization."""
+    """Retrieve all commit messages for a user across all repos in an organization from the last 24 hours."""
     
     headers = {
         "Authorization": f"token {token}",
         "Accept": "application/vnd.github.v3+json"
     }
+    
+    # Calculate the date and time from 24 hours ago in the required format for the GitHub API
+    since_date = (datetime.utcnow() - timedelta(days=1)).isoformat() + 'Z'
     
     # Step 1: Get a list of all repositories in the organization
     repos_url = f"https://api.github.com/orgs/{org_name}/repos"
@@ -95,7 +98,7 @@ def get_all_commit_messages_for_user(org_name: str, username: str, token: str) -
     # Step 2: Iterate over each repository
     for repo in repos:
         repo_name = repo["name"]
-        commits_url = f"https://api.github.com/repos/{org_name}/{repo_name}/commits?author={username}"
+        commits_url = f"https://api.github.com/repos/{org_name}/{repo_name}/commits?author={username}&since={since_date}"
         response = requests.get(commits_url, headers=headers)
         
         if response.status_code != 200:
@@ -104,6 +107,7 @@ def get_all_commit_messages_for_user(org_name: str, username: str, token: str) -
         commits = response.json()
         
         # Extract commit messages for this repository
+        # TODO: Potentially return commit URLs as well.
         repo_commit_messages = [commit["commit"]["message"] for commit in commits]
         
         all_commit_messages.extend(repo_commit_messages)

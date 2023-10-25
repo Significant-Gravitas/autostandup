@@ -13,6 +13,10 @@ exit 1
 import os
 import openai
 import sys
+from dotenv import load_dotenv
+
+# Load environment variables from the .env file
+load_dotenv()
 
 # Initialize the OpenAI API
 openai.api_key = os.getenv('OPENAI_API_KEY')
