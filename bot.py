@@ -25,6 +25,7 @@ from discord import Intents, DMChannel
 from flask import Flask
 import openai
 from asyncio import Task, ensure_future, CancelledError
+import requests
 
 app = Flask(__name__)
 
@@ -70,6 +71,44 @@ async def weekly_state_reset(weekly_post_manager: WeeklyPostManager, streaks_man
     
     # Initialize new weekly post
     await weekly_post_manager.initialize_post(team_members)
+
+def get_all_commit_messages_for_user(org_name: str, username: str, token: str) -> list:
+    """Retrieve all commit messages for a user across all repos in an organization."""
+    
+    headers = {
+        "Authorization": f"token {token}",
+        "Accept": "application/vnd.github.v3+json"
+    }
+    
+    # Step 1: Get a list of all repositories in the organization
+    repos_url = f"https://api.github.com/orgs/{org_name}/repos"
+    response = requests.get(repos_url, headers=headers)
+    
+    if response.status_code != 200:
+        # Handle errors
+        return []
+    
+    repos = response.json()
+    
+    all_commit_messages = []
+
+    # Step 2: Iterate over each repository
+    for repo in repos:
+        repo_name = repo["name"]
+        commits_url = f"https://api.github.com/repos/{org_name}/{repo_name}/commits?author={username}"
+        response = requests.get(commits_url, headers=headers)
+        
+        if response.status_code != 200:
+            continue
+        
+        commits = response.json()
+        
+        # Extract commit messages for this repository
+        repo_commit_messages = [commit["commit"]["message"] for commit in commits]
+        
+        all_commit_messages.extend(repo_commit_messages)
+    
+    return all_commit_messages
 
 async def send_status_request(member: TeamMember, 
                               weekly_post_manager: WeeklyPostManager, 
