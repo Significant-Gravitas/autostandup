@@ -189,13 +189,13 @@ async def status_request(ctx, discord_id: int):
         await ctx.send(f"No user with Discord ID {discord_id} found.")
 
 @bot.command(name='adduser')
-async def add_user(ctx, discord_id: int, time_zone: str, name: str):
+async def add_user(ctx, discord_id: int, time_zone: str, name: str, github_username: str):
     if ctx.message.author.id != ADMIN_DISCORD_ID or not isinstance(ctx.channel, DMChannel):
         await ctx.send("You're not authorized to add users.")
         return
     
     # Add the new member using team_member_manager
-    team_member_manager.add_member(discord_id, name, time_zone)
+    team_member_manager.add_member(discord_id, name, time_zone, github_username)
     
     # Update the weekly post to include the new member
     new_member = team_member_manager.find_member(discord_id)
@@ -237,8 +237,8 @@ async def list_users(ctx):
         return
 
     # List users using team_member_manager
-    users = [(member.discord_id, member.name, member.time_zone, member.current_streak) for member in team_member_manager.team_members]
-    user_list = '\n'.join([f"Name: {user[1]}, Discord ID: {user[0]}, Time Zone: {user[2]}, Current Streak: {user[3]}" for user in users])
+    users = [(member.discord_id, member.name, member.time_zone, member.github_username, member.current_streak) for member in team_member_manager.team_members]
+    user_list = '\n'.join([f"Name: {user[1]}, Discord ID: {user[0]}, Time Zone: {user[2]}, GitHub Username: {user[3]}, Current Streak: {user[4]}" for user in users])
 
     await ctx.send(f"List of users:\n{user_list}")
 

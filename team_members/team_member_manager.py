@@ -18,7 +18,7 @@ class TeamMemberManager:
 
     def load_team_members(self) -> List[TeamMember]:
         """
-        Load team members from the SQLite database into a list of TeamMember objects.
+        Load team members from the MySQL database into a list of TeamMember objects.
 
         :return: List of TeamMember objects.
         """
@@ -29,7 +29,8 @@ class TeamMemberManager:
             member = TeamMember(
                 discord_id=member_data[0],
                 time_zone=member_data[2],
-                name=member_data[1]
+                name=member_data[1],
+                github_username=member_data[3]
             )
             team_members.append(member)
 
@@ -47,16 +48,17 @@ class TeamMemberManager:
                 return member
         return None
 
-    def add_member(self, discord_id: int, name: str, time_zone: str):
+    def add_member(self, discord_id: int, name: str, time_zone: str, github_username: str):
         """
         Add a new team member to the list and the database.
 
         :param discord_id: The Discord ID of the new member.
         :param name: The name of the new member.
         :param time_zone: The time zone of the new member.
+        :param github_username: The GitHub username of the new member.
         """
-        new_member = TeamMember(discord_id, time_zone, name)
-        self.db.insert_new_member(discord_id, name, time_zone)
+        new_member = TeamMember(discord_id, time_zone, name, github_username)
+        self.db.insert_new_member(discord_id, name, time_zone, github_username)
         self.team_members.append(new_member)
 
     def remove_member(self, discord_id: int):
