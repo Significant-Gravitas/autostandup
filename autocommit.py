@@ -13,6 +13,7 @@ exit 1
 import os
 import openai
 import sys
+import subprocess
 from dotenv import load_dotenv
 
 # Load environment variables from the .env file
@@ -86,9 +87,9 @@ def main():
         choice = input("\nDo you want to [a]ccept, or [g]enerate a new one? ").lower()
 
         if choice == 'a':
-            os.system('git stash push -k')  # Stash unstaged changes, keeping the index intact
-            os.system(f'git commit -m "{commit_msg}"')
-            os.system('git stash pop')  # Apply the stashed changes back
+            subprocess.run(['git', 'stash', 'push', '-k'])  # Stash unstaged changes, keeping the index intact
+            subprocess.run(['git', 'commit', '-m', commit_msg])
+            subprocess.run(['git', 'stash', 'pop'])  # Apply the stashed changes back
             print("Changes committed!")
             break
         elif choice == 'g':
