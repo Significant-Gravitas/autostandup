@@ -1,6 +1,5 @@
 # Import required modules
 import os
-import pytz
 from typing import List
 from dotenv import load_dotenv
 from datetime import datetime, timedelta
@@ -45,11 +44,15 @@ MYSQL_PASSWORD = os.getenv('MYSQL_PASSWORD')
 MYSQL_DB = os.getenv('MYSQL_DB')
 MYSQL_PORT = os.getenv('MYSQL_PORT')
 
+ORG_NAME = os.getenv('GITHUB_ORG_NAME')
+ORG_TOKEN = os.getenv('GITHUB_ORG_TOKEN')
+
 OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
 
 # Initialize bot with default intents
 intents = Intents.default()
 intents.members = True
+intents.message_content = True
 bot = commands.Bot(command_prefix='!', intents=intents)
 openai.api_key = OPENAI_API_KEY
 
@@ -60,6 +63,9 @@ team_member_manager = None
 updates_manager = None
 scheduler = None
 ongoing_status_requests = {}
+
+THUMBS_UP_EMOJI = "👍"
+PENCIL_EMOJI = "✏️"
 
 async def weekly_state_reset(weekly_post_manager: WeeklyPostManager, streaks_manager: StreaksManager, team_members: List[TeamMember]):
     # Reset streaks for the previous week
@@ -73,6 +79,7 @@ async def weekly_state_reset(weekly_post_manager: WeeklyPostManager, streaks_man
     await weekly_post_manager.initialize_post(team_members)
 
 def get_all_commit_messages_for_user(org_name: str, username: str, token: str) -> list:
+    # TODO: This shouldn't always be 24 hours. It should be the last working day
     """Retrieve all commit messages for a user across all repos in an organization from the last 24 hours."""
     
     headers = {
@@ -83,7 +90,7 @@ def get_all_commit_messages_for_user(org_name: str, username: str, token: str) -
     # Calculate the date and time from 24 hours ago in the required format for the GitHub API
     since_date = (datetime.utcnow() - timedelta(days=1)).isoformat() + 'Z'
     
-    # Step 1: Get a list of all repositories in the organization
+    # Get a list of all repositories in the organization
     repos_url = f"https://api.github.com/orgs/{org_name}/repos"
     response = requests.get(repos_url, headers=headers)
     
@@ -95,7 +102,7 @@ def get_all_commit_messages_for_user(org_name: str, username: str, token: str) -
     
     all_commit_messages = []
 
-    # Step 2: Iterate over each repository
+    # Iterate over each repository
     for repo in repos:
         repo_name = repo["name"]
         commits_url = f"https://api.github.com/repos/{org_name}/{repo_name}/commits?author={username}&since={since_date}"
@@ -170,6 +177,97 @@ async def send_status_request(member: TeamMember,
         guild = bot.get_guild(GUILD_TOKEN)
         channel_to_post_in = guild.get_channel(CHANNEL_TOKEN)
         await channel_to_post_in.send(f"**{member.name}'s summary:**\n{summarized_message}")
+
+async def send_status_request_revised(member: TeamMember):
+    if member.weekly_checkins == 5:
+        return  # If already completed 5 check-ins, do nothing
+        
+    user = bot.get_user(member.discord_id)
+    if user:
+        # TODO: Add functionality to remove previous days reactions
+        # Retrieve all commit messages for the member
+        commit_messages = get_all_commit_messages_for_user(ORG_NAME, member.github_username, ORG_TOKEN)
+            
+        if not commit_messages:
+            msg = "You have no commits for the previous working day."
+        else:
+            summarized_report = await updates_manager.summarize_technical_updates(commit_messages)
+            msg = f"Here's your summarized report based on your commits:\n{summarized_report}\nReact with {THUMBS_UP_EMOJI} to confirm or {PENCIL_EMOJI} to suggest changes."
+
+        # Send initial message and wait for reaction
+        sent_message = await user.send(msg)
+        await sent_message.add_reaction(THUMBS_UP_EMOJI)
+        await sent_message.add_reaction(PENCIL_EMOJI)
+        
+        def check(m) -> bool:
+            return m.author == user and isinstance(m.channel, DMChannel)
+
+        reaction, reactor = await bot.wait_for('reaction_add', check=lambda r, u: u == user and r.message.id == sent_message.id and isinstance(r.message.channel, DMChannel) and str(r.emoji) in [THUMBS_UP_EMOJI, PENCIL_EMOJI])
+
+        for emoji in [THUMBS_UP_EMOJI, PENCIL_EMOJI]:
+            await sent_message.remove_reaction(emoji, bot.user)
+        
+        while str(reaction.emoji) == PENCIL_EMOJI:
+            await user.send("Please provide your feedback or edit the status.")
+            feedback = await bot.wait_for('message', check=check)
+            
+            # Send original + feedback to LLM for reformatting
+            updated_report = await updates_manager.summarize_feedback_and_revisions(summarized_report, feedback.content)
+            msg = f"Here's the revised report:\n{updated_report}\nReact with {THUMBS_UP_EMOJI} to confirm or {PENCIL_EMOJI} to provide further feedback."
+            
+            sent_message = await user.send(msg)
+            await sent_message.add_reaction(THUMBS_UP_EMOJI)
+            await sent_message.add_reaction(PENCIL_EMOJI)
+            
+            reaction, user = await bot.wait_for('reaction_add', check=lambda r, u: u == user and r.message.id == sent_message.id and isinstance(r.message.channel, DMChannel) and str(r.emoji) in [THUMBS_UP_EMOJI, PENCIL_EMOJI])
+
+            for emoji in [THUMBS_UP_EMOJI, PENCIL_EMOJI]:
+                await sent_message.remove_reaction(emoji, bot.user)
+            
+        # Prompt user for non-technical updates from the previous day
+        non_technical_msg_prompt = "Please provide any non-technical updates from your previous working day, e.g., important meetings, interviews, etc."
+        await user.send(non_technical_msg_prompt)
+
+        # Wait for user's non-technical update and accept whatever they put first
+        non_technical_update_raw = await bot.wait_for('message', check=check)
+        
+        # Summarize non-technical update with LLM
+        non_technical_update = await updates_manager.summarize_non_technical_updates(non_technical_update_raw.content)
+        
+        # Prompt user for their goals for the day
+        goals_msg_prompt = "What do you plan to work on or accomplish today?"
+        await user.send(goals_msg_prompt)
+
+        # Wait for user's goals for the day and accept whatever they put first
+        goals_for_today_raw = await bot.wait_for('message', check=check)
+
+        # Summarize goals for the day with LLM
+        goals_for_today = await updates_manager.summarize_goals_for_the_day(goals_for_today_raw.content)
+
+        # Compile the final report
+        final_report = f"**Technical Update:**\n{updated_report}\n\n**Non-Technical Update:**\n{non_technical_update}\n\n**Goals for Today:**\n{goals_for_today}"
+
+        # Post the final compiled report to the designated Discord channel
+        guild = bot.get_guild(GUILD_TOKEN)
+        channel_to_post_in = guild.get_channel(CHANNEL_TOKEN)
+        await channel_to_post_in.send(f"**{member.name}'s Update:**\n{final_report}")
+
+@bot.command(name='statusrequestv2')
+async def status_request_v2(ctx, discord_id: int):
+    if ctx.message.author.id != ADMIN_DISCORD_ID or not isinstance(ctx.channel, DMChannel):
+        await ctx.send("You're not authorized to test revised status.")
+        return
+
+    # Find the member object using the Discord ID
+    member_to_test = team_member_manager.find_member(discord_id)
+
+    if member_to_test:
+        # Send the revised status request to the member
+        await ctx.send(f"Revised status request sent to user with Discord ID {discord_id}.")
+        await send_status_request_revised(member_to_test)
+        await ctx.send(f"Revised status request process completed for user with Discord ID {discord_id}.")
+    else:
+        await ctx.send(f"No user with Discord ID {discord_id} found.")
 
 @bot.command(name='statusrequest')
 async def status_request(ctx, discord_id: int):
