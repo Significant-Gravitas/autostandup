@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta
 import pytz
-from typing import List, Dict, Any
+from typing import List, Dict, Tuple
 from base_db import BaseDB
 
 class UpdatesDB(BaseDB):
@@ -159,3 +159,30 @@ class UpdatesDB(BaseDB):
         statuses = c.fetchall()
         return statuses
     
+    def get_last_update_timestamp(self, discord_id: int) -> Tuple[datetime, str]:
+        """
+        Fetches the timestamp and time zone of the last status update for a given user.
+
+        Args:
+            discord_id: The Discord ID of the user.
+
+        Returns:
+            A tuple containing the timestamp of the last update and its time zone, or (None, None) if there are no updates.
+        """
+        if not self.conn.is_connected():
+            print("Reconnecting to MySQL")
+            self.connect()
+
+        c = self.conn.cursor()
+        
+        query = """
+            SELECT timestamp, time_zone FROM updates
+            WHERE discord_id = %s
+            ORDER BY timestamp DESC
+            LIMIT 1
+        """
+        params = (discord_id,)
+        c.execute(query, params)
+        
+        row = c.fetchone()
+        return (row[0], row[1]) if row else (None, None)

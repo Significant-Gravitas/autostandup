@@ -62,6 +62,18 @@ class UpdatesManager:
         """
         return self.updates_db.get_all_statuses_for_user(discord_id)
 
+    def get_last_update_timestamp(self, discord_id: int) -> Tuple[datetime, str]:
+        """
+        Fetches the timestamp and time zone of the last status update for a given user.
+
+        Args:
+            discord_id: The Discord ID of the user.
+
+        Returns:
+            A tuple containing the timestamp of the last update and its time zone, or (None, None) if there are no updates.
+        """
+        return self.updates_db.get_last_update_timestamp(discord_id)
+
 
     async def generate_daily_summary(self, user_message: str) -> str:
         """

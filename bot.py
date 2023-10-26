@@ -1,5 +1,6 @@
 # Import required modules
 import os
+import pytz
 from typing import List
 from dotenv import load_dotenv
 from datetime import datetime, timedelta
@@ -78,8 +79,7 @@ async def weekly_state_reset(weekly_post_manager: WeeklyPostManager, streaks_man
     # Initialize new weekly post
     await weekly_post_manager.initialize_post(team_members)
 
-def get_all_commit_messages_for_user(org_name: str, username: str, token: str) -> list:
-    # TODO: This shouldn't always be 24 hours. It should be the last working day
+def get_all_commit_messages_for_user(org_name: str, token: str, member: TeamMember) -> list:
     """Retrieve all commit messages for a user across all repos in an organization from the last 24 hours."""
     
     headers = {
@@ -87,9 +87,17 @@ def get_all_commit_messages_for_user(org_name: str, username: str, token: str) -
         "Accept": "application/vnd.github.v3+json"
     }
     
-    # Calculate the date and time from 24 hours ago in the required format for the GitHub API
-    since_date = (datetime.utcnow() - timedelta(days=1)).isoformat() + 'Z'
-    
+    last_update_timestamp, user_time_zone = updates_manager.get_last_update_timestamp(member.discord_id)
+    if last_update_timestamp:
+        # Convert the timestamp to UTC
+        local_tz = pytz.timezone(user_time_zone)
+        localized_timestamp = local_tz.localize(last_update_timestamp)
+        utc_timestamp = localized_timestamp.astimezone(pytz.utc)
+        since_date = utc_timestamp.isoformat() + 'Z'
+    else:
+        # If no updates found, default to last 24 hours (or you can adjust this default behavior as needed)
+        since_date = (datetime.utcnow() - timedelta(days=1)).isoformat() + 'Z'
+
     # Get a list of all repositories in the organization
     repos_url = f"https://api.github.com/orgs/{org_name}/repos"
     response = requests.get(repos_url, headers=headers)
@@ -105,7 +113,7 @@ def get_all_commit_messages_for_user(org_name: str, username: str, token: str) -
     # Iterate over each repository
     for repo in repos:
         repo_name = repo["name"]
-        commits_url = f"https://api.github.com/repos/{org_name}/{repo_name}/commits?author={username}&since={since_date}"
+        commits_url = f"https://api.github.com/repos/{org_name}/{repo_name}/commits?author={member.github_username}&since={since_date}"
         response = requests.get(commits_url, headers=headers)
         
         if response.status_code != 200:
@@ -190,7 +198,7 @@ async def send_status_request_revised(member: TeamMember):
             ongoing_task.cancel()
 
         # Retrieve all commit messages for the member
-        commit_messages = get_all_commit_messages_for_user(ORG_NAME, member.github_username, ORG_TOKEN)
+        commit_messages = get_all_commit_messages_for_user(ORG_NAME, ORG_TOKEN, member)
             
         if not commit_messages:
             msg = "You have no commits for the previous working day."
