@@ -181,10 +181,14 @@ async def send_status_request(member: TeamMember,
 async def send_status_request_revised(member: TeamMember):
     if member.weekly_checkins == 5:
         return  # If already completed 5 check-ins, do nothing
-        
+
     user = bot.get_user(member.discord_id)
     if user:
-        # TODO: Add functionality to remove previous days reactions
+        # Cancel the previous task if it exists
+        ongoing_task: Task = ongoing_status_requests.get(member.discord_id)
+        if ongoing_task:
+            ongoing_task.cancel()
+
         # Retrieve all commit messages for the member
         commit_messages = get_all_commit_messages_for_user(ORG_NAME, member.github_username, ORG_TOKEN)
             
@@ -202,34 +206,50 @@ async def send_status_request_revised(member: TeamMember):
         def check(m) -> bool:
             return m.author == user and isinstance(m.channel, DMChannel)
 
-        reaction, reactor = await bot.wait_for('reaction_add', check=lambda r, u: u == user and r.message.id == sent_message.id and isinstance(r.message.channel, DMChannel) and str(r.emoji) in [THUMBS_UP_EMOJI, PENCIL_EMOJI])
-
+        # Store the new wait_for reaction task in the global dictionary
+        ongoing_task = ensure_future(bot.wait_for('reaction_add', check=lambda r, u: u == user and r.message.id == sent_message.id and isinstance(r.message.channel, DMChannel) and str(r.emoji) in [THUMBS_UP_EMOJI, PENCIL_EMOJI]))
+        ongoing_status_requests[member.discord_id] = ongoing_task
+        reaction, reactor = await ongoing_task
+        ongoing_status_requests.pop(member.discord_id, None)  # Remove the task once we get the reaction
+        
         for emoji in [THUMBS_UP_EMOJI, PENCIL_EMOJI]:
             await sent_message.remove_reaction(emoji, bot.user)
         
         while str(reaction.emoji) == PENCIL_EMOJI:
             await user.send("Please provide your feedback or edit the status.")
-            feedback = await bot.wait_for('message', check=check)
             
+            # Store the new wait_for message (feedback) task in the global dictionary
+            ongoing_task = ensure_future(bot.wait_for('message', check=check))
+            ongoing_status_requests[member.discord_id] = ongoing_task
+            feedback = await ongoing_task
+            ongoing_status_requests.pop(member.discord_id, None)  # Remove the task once we get the feedback
+                
             # Send original + feedback to LLM for reformatting
-            updated_report = await updates_manager.summarize_feedback_and_revisions(summarized_report, feedback.content)
-            msg = f"Here's the revised report:\n{updated_report}\nReact with {THUMBS_UP_EMOJI} to confirm or {PENCIL_EMOJI} to provide further feedback."
+            summarized_report = await updates_manager.summarize_feedback_and_revisions(summarized_report, feedback.content)
+            msg = f"Here's the revised report:\n{summarized_report}\nReact with {THUMBS_UP_EMOJI} to confirm or {PENCIL_EMOJI} to provide further feedback."
             
             sent_message = await user.send(msg)
             await sent_message.add_reaction(THUMBS_UP_EMOJI)
             await sent_message.add_reaction(PENCIL_EMOJI)
             
-            reaction, user = await bot.wait_for('reaction_add', check=lambda r, u: u == user and r.message.id == sent_message.id and isinstance(r.message.channel, DMChannel) and str(r.emoji) in [THUMBS_UP_EMOJI, PENCIL_EMOJI])
+            # Store the new wait_for reaction task in the global dictionary
+            ongoing_task = ensure_future(bot.wait_for('reaction_add', check=lambda r, u: u == user and r.message.id == sent_message.id and isinstance(r.message.channel, DMChannel) and str(r.emoji) in [THUMBS_UP_EMOJI, PENCIL_EMOJI]))
+            ongoing_status_requests[member.discord_id] = ongoing_task
+            reaction, user = await ongoing_task
+            ongoing_status_requests.pop(member.discord_id, None)  # Remove the task once we get the reaction
 
             for emoji in [THUMBS_UP_EMOJI, PENCIL_EMOJI]:
                 await sent_message.remove_reaction(emoji, bot.user)
-            
+                
         # Prompt user for non-technical updates from the previous day
         non_technical_msg_prompt = "Please provide any non-technical updates from your previous working day, e.g., important meetings, interviews, etc."
         await user.send(non_technical_msg_prompt)
 
-        # Wait for user's non-technical update and accept whatever they put first
-        non_technical_update_raw = await bot.wait_for('message', check=check)
+        # Store the new wait_for message (non-technical update) task in the global dictionary
+        ongoing_task = ensure_future(bot.wait_for('message', check=check))
+        ongoing_status_requests[member.discord_id] = ongoing_task
+        non_technical_update_raw = await ongoing_task
+        ongoing_status_requests.pop(member.discord_id, None)  # Remove the task once we get the non-technical update
         
         # Summarize non-technical update with LLM
         non_technical_update = await updates_manager.summarize_non_technical_updates(non_technical_update_raw.content)
@@ -238,14 +258,17 @@ async def send_status_request_revised(member: TeamMember):
         goals_msg_prompt = "What do you plan to work on or accomplish today?"
         await user.send(goals_msg_prompt)
 
-        # Wait for user's goals for the day and accept whatever they put first
-        goals_for_today_raw = await bot.wait_for('message', check=check)
-
+        # Store the new wait_for message (goals for the day) task in the global dictionary
+        ongoing_task = ensure_future(bot.wait_for('message', check=check))
+        ongoing_status_requests[member.discord_id] = ongoing_task
+        goals_for_today_raw = await ongoing_task
+        ongoing_status_requests.pop(member.discord_id, None)  # Remove the task once we get the goals
+        
         # Summarize goals for the day with LLM
         goals_for_today = await updates_manager.summarize_goals_for_the_day(goals_for_today_raw.content)
 
         # Compile the final report
-        final_report = f"**Technical Update:**\n{updated_report}\n\n**Non-Technical Update:**\n{non_technical_update}\n\n**Goals for Today:**\n{goals_for_today}"
+        final_report = f"**Technical Update:**\n{summarized_report}\n\n**Non-Technical Update:**\n{non_technical_update}\n\n**Goals for Today:**\n{goals_for_today}"
 
         # Post the final compiled report to the designated Discord channel
         guild = bot.get_guild(GUILD_TOKEN)
