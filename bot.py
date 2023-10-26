@@ -275,13 +275,24 @@ async def send_status_request_revised(member: TeamMember):
         # Summarize goals for the day with LLM
         goals_for_today = await updates_manager.summarize_goals_for_the_day(goals_for_today_raw.content)
 
-        # Compile the final report
-        final_report = f"**Technical Update:**\n{summarized_report}\n\n**Non-Technical Update:**\n{non_technical_update}\n\n**Goals for Today:**\n{goals_for_today}"
+        # Member name update as a header
+        member_update_header = f"## {member.name}'s Update:"
 
-        # Post the final compiled report to the designated Discord channel
+        # Compile the final report with Markdown formatting
+        final_report = (
+            f"\n### Technical Update:\n"
+            f"{summarized_report}\n"
+            f"\n### Non-Technical Update:\n"
+            f"{non_technical_update}\n"
+            f"\n### Goals for Today:\n"
+            f"{goals_for_today}"
+        )
+
+        # Concatenate the member name update with the final report and send to the designated Discord channel
+        complete_message = f"{member_update_header}{final_report}"
         guild = bot.get_guild(GUILD_TOKEN)
         channel_to_post_in = guild.get_channel(CHANNEL_TOKEN)
-        await channel_to_post_in.send(f"**{member.name}'s Update:**\n{final_report}")
+        await channel_to_post_in.send(complete_message)
 
 @bot.command(name='statusrequestv2')
 async def status_request_v2(ctx, discord_id: int):
