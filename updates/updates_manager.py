@@ -149,3 +149,164 @@ class UpdatesManager:
         except Exception as e:
             print(f"An error occurred while generating the weekly summary: {e}")
             return "Error in generating weekly summary"
+        
+    async def summarize_technical_updates(self, commit_messages: List[str]) -> str:
+        """
+        Summarizes the technical updates based on commit messages.
+
+        Args:
+            commit_messages: List of commit messages for the day.
+
+        Returns:
+            A summarized version of the technical updates.
+        """
+
+        # Combine commit messages into a single string for the LLM
+        combined_commits = "\n".join(commit_messages)
+
+        # If there are no commit messages, return a default message
+        if not combined_commits:
+            return "No technical updates found based on commit messages."
+
+        # Summarization using LLM
+        system_message = "Please provide a concise summary of the technical updates based on the provided commit messages."
+
+        messages = [
+            {"role": "system", "content": system_message},
+            {"role": "user", "content": combined_commits}
+        ]
+
+        model_engine = "gpt-3.5-turbo-0613"
+
+        try:
+            response = openai.ChatCompletion.create(
+                model=model_engine,
+                messages=messages
+            )
+
+            # Extract the generated summary
+            summarized_message = response['choices'][0]['message']['content'].strip()
+
+            return summarized_message
+
+        except Exception as e:
+            print(f"An error occurred while generating the technical summary: {e}")
+            return "Error in generating technical summary."
+
+    async def summarize_feedback_and_revisions(self, original_report: str, feedback: str) -> str:
+        """
+        Takes the original report and user feedback and generates a revised summary.
+
+        Args:
+            original_report: The original summarized report.
+            feedback: The user's feedback or suggested edits.
+
+        Returns:
+            The revised summary.
+        """
+        # Prepare a system message to guide OpenAI's model
+        system_message = "Revise the original report based on the user's feedback."
+
+        # Prepare the messages input for ChatCompletion
+        messages = [
+            {"role": "system", "content": system_message},
+            {"role": "user", "content": f"Original Report: {original_report}"},
+            {"role": "user", "content": f"Feedback: {feedback}"}
+        ]
+        
+        # Specify the model engine you want to use
+        model_engine = "gpt-3.5-turbo-0613"
+        
+        try:
+            # Make an API call to OpenAI's ChatCompletion
+            response = openai.ChatCompletion.create(
+                model=model_engine,
+                messages=messages
+            )
+            
+            # Extract the generated text
+            revised_summary = response['choices'][0]['message']['content'].strip()
+
+            return revised_summary
+            
+        except Exception as e:
+            print(f"An error occurred while generating the revised summary: {e}")
+            return "Error in generating revised summary"
+
+    async def summarize_non_technical_updates(self, update: str) -> str:
+        """
+        Summarizes a non-technical update using a large language model.
+
+        Args:
+            update: The raw non-technical update provided by the user.
+
+        Returns:
+            The summarized non-technical update.
+        """
+
+        # System message to guide the LLM for a concise summary
+        system_message = "Please provide a concise summary of the non-technical update shared by the user."
+
+        # Prepare the messages input for ChatCompletion
+        messages = [
+            {"role": "system", "content": system_message},
+            {"role": "user", "content": update}
+        ]
+
+        # Specify the model engine you want to use
+        model_engine = "gpt-3.5-turbo-0613"
+
+        try:
+            # Make an API call to OpenAI's ChatCompletion
+            response = openai.ChatCompletion.create(
+                model=model_engine,
+                messages=messages
+            )
+
+            # Extract the generated summary
+            summarized_message = response['choices'][0]['message']['content'].strip()
+
+            return summarized_message
+
+        except Exception as e:
+            print(f"An error occurred while generating the non-technical summary: {e}")
+            return "Error in generating summary"
+
+    async def summarize_goals_for_the_day(self, goals: str) -> str:
+        """
+        Summarizes the user's goals for the day using a large language model.
+
+        Args:
+            goals: The user's raw input on their goals for the day.
+
+        Returns:
+            The summarized goals for the day.
+        """
+        # Initiate the conversation with the model
+        system_message = "Please provide a concise summary of the user's goals for today."
+        
+        # Prepare the messages input for ChatCompletion
+        messages = [
+            {"role": "system", "content": system_message},
+            {"role": "user", "content": goals}
+        ]
+        
+        # Specify the model engine you want to use (this is an example and can be adjusted based on your needs)
+        model_engine = "gpt-3.5-turbo-0613"
+        
+        try:
+            # Provide user's input and retrieve model's response
+            response = openai.ChatCompletion.create(
+                model=model_engine,
+                messages=messages
+            )
+            
+            # Extract the generated text
+            summarized_goals = response['choices'][0]['message']['content'].strip()
+
+            # Return the summary
+            return summarized_goals
+                
+        except Exception as e:
+            print(f"An error occurred while generating the goals summary: {e}")
+            return "Error in generating goals summary"
