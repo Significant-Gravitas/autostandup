@@ -74,6 +74,14 @@ class UpdatesManager:
         """
         return self.updates_db.get_last_update_timestamp(discord_id)
 
+    def delete_newest_status(self, discord_id: int) -> None:
+        """
+        Deletes the most recent status update for a given user.
+
+        Args:
+            discord_id: The Discord ID of the user.
+        """
+        self.updates_db.delete_newest_status(discord_id)
 
     async def generate_daily_summary(self, user_message: str) -> str:
         """

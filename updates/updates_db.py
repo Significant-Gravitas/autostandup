@@ -186,3 +186,37 @@ class UpdatesDB(BaseDB):
         
         row = c.fetchone()
         return (row[0], row[1]) if row else (None, None)
+    
+    def delete_newest_status(self, discord_id: int) -> None:
+        """
+        Deletes the most recent status update for a given user.
+
+        Args:
+            discord_id: The Discord ID of the user.
+        """
+        if not self.conn.is_connected():
+            print("Reconnecting to MySQL")
+            self.connect()
+
+        c = self.conn.cursor()
+        
+        # Fetch the ID of the newest status update for the given user
+        query_get_id = """
+            SELECT id FROM updates
+            WHERE discord_id = %s
+            ORDER BY timestamp DESC
+            LIMIT 1
+        """
+        c.execute(query_get_id, (discord_id,))
+        
+        row = c.fetchone()
+        if row:
+            status_id = row[0]
+            
+            # Now, delete the status update using its ID
+            query_delete = """
+                DELETE FROM updates WHERE id = %s
+            """
+            c.execute(query_delete, (status_id,))
+            
+            self.conn.commit()

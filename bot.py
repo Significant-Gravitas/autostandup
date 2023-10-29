@@ -414,6 +414,23 @@ async def force_post_rebuild(ctx):
 
     await ctx.send("Post rebuilt successfully.")
 
+@bot.command(name='deletelateststatus')
+async def delete_latest_status(ctx, discord_id: int):
+    if ctx.message.author.id != ADMIN_DISCORD_ID or not isinstance(ctx.channel, DMChannel):
+        await ctx.send("You're not authorized to delete status updates.")
+        return
+
+    # Find the member object using the Discord ID
+    member = team_member_manager.find_member(discord_id)
+
+    if not member:
+        await ctx.send(f"No user with Discord ID {discord_id} found.")
+        return
+
+    # Delete the newest status using the UpdatesManager's method
+    updates_manager.delete_newest_status(discord_id)
+    await ctx.send(f"Latest status update for user with Discord ID {discord_id} deleted successfully.")
+
 @bot.command(name='viewuser')
 async def view_user(ctx, discord_id: int):
     if ctx.message.author.id != ADMIN_DISCORD_ID or not isinstance(ctx.channel, DMChannel):
