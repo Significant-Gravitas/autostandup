@@ -81,9 +81,12 @@ def main():
         print("No staged changes detected. Ensure you've staged your changes using 'git add <filename>' or use the '--stage-all' flag to stage all changes.")
         return
 
+    commit_msg = None
     while True:
-        commit_msg = generate_commit_message(original_diff)
-        print(f"Suggested Commit Message:\n\n{commit_msg}")
+        if not commit_msg:
+            commit_msg = generate_commit_message(original_diff)
+            print(f"Suggested Commit Message:\n\n{commit_msg}")
+
         choice = input("\nDo you want to [a]ccept, [g]enerate a new one, provide [f]eedback, or [e]xit? ").lower()
 
         if choice == 'a':
@@ -93,6 +96,7 @@ def main():
             print("Changes committed!")
             break
         elif choice == 'g':
+            commit_msg = None  # Reset the commit_msg to trigger generation in the next loop iteration
             print("Generating a new commit message...\n")
         elif choice == 'f':
             feedback = input("Provide feedback to guide the message generation: ")
