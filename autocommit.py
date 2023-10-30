@@ -76,15 +76,15 @@ def main():
         print("Error: This is not a valid Git repository.")
         return
 
-    diff = get_staged_diff()
-    if not diff:
+    original_diff = get_staged_diff()
+    if not original_diff:
         print("No staged changes detected. Ensure you've staged your changes using 'git add <filename>' or use the '--stage-all' flag to stage all changes.")
         return
 
     while True:
-        commit_msg = generate_commit_message(diff)
+        commit_msg = generate_commit_message(original_diff)
         print(f"Suggested Commit Message:\n\n{commit_msg}")
-        choice = input("\nDo you want to [a]ccept, or [g]enerate a new one? ").lower()
+        choice = input("\nDo you want to [a]ccept, [g]enerate a new one, provide [f]eedback, or [e]xit? ").lower()
 
         if choice == 'a':
             subprocess.run(['git', 'stash', 'push', '-k'])  # Stash unstaged changes, keeping the index intact
@@ -94,8 +94,16 @@ def main():
             break
         elif choice == 'g':
             print("Generating a new commit message...\n")
+        elif choice == 'f':
+            feedback = input("Provide feedback to guide the message generation: ")
+            diff_with_feedback = original_diff + "\n\nFeedback: " + feedback  # Combine original diff with latest feedback
+            commit_msg = generate_commit_message(diff_with_feedback)  # Use the combined diff for generating message
+            print(f"New Suggested Commit Message based on feedback:\n\n{commit_msg}")
+        elif choice == 'e':
+            print("Exiting the script.")
+            break
         else:
-            print("Invalid choice. Please choose [a]ccept or [g]enerate.")
+            print("Invalid choice. Please choose [a]ccept, [g]enerate, provide [f]eedback, or [e]xit.")
 
 if __name__ == '__main__':
     main()
