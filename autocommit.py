@@ -32,7 +32,7 @@ def stage_all_changes():
 
 def generate_commit_message(diff):
     """Generate a commit title and message using the OpenAI API."""
-    
+
     system_message = {
         "role": "system",
         "content": (
@@ -81,10 +81,14 @@ def main():
         print("No staged changes detected. Ensure you've staged your changes using 'git add <filename>' or use the '--stage-all' flag to stage all changes.")
         return
 
+    context = input("Provide context or any specific details you'd like to include for generating the commit message: ")
+    if context:
+        diff_with_context = original_diff + "\n\nFurther user context to incorporate in commit message: " + context
+
     commit_msg = None
     while True:
         if not commit_msg:
-            commit_msg = generate_commit_message(original_diff)
+            commit_msg = generate_commit_message(diff_with_context)
             print(f"Suggested Commit Message:\n\n{commit_msg}")
 
         choice = input("\nDo you want to [a]ccept, [g]enerate a new one, provide [f]eedback, or [e]xit? ").lower()
@@ -100,7 +104,7 @@ def main():
             print("Generating a new commit message...\n")
         elif choice == 'f':
             feedback = input("Provide feedback to guide the message generation: ")
-            diff_with_feedback = original_diff + "\n\nFeedback: " + feedback  # Combine original diff with latest feedback
+            diff_with_feedback = diff_with_context + "\n\nFeedback: " + feedback  # Combine original diff with latest feedback
             commit_msg = generate_commit_message(diff_with_feedback)  # Use the combined diff for generating message
             print(f"New Suggested Commit Message based on feedback:\n\n{commit_msg}")
         elif choice == 'e':
