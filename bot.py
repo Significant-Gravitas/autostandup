@@ -138,6 +138,11 @@ async def send_status_request(member: TeamMember,
 
     user = bot.get_user(member.discord_id)
     if user:
+        # Notify the admin
+        admin_user = bot.get_user(ADMIN_DISCORD_ID)
+        if admin_user:
+            await admin_user.send(f"Status request sent to {member.name}.")
+
         # Cancel the previous wait_for task if it exists
         ongoing_task: Task = ongoing_status_requests.get(member.discord_id)
         if ongoing_task:
@@ -293,6 +298,19 @@ async def send_status_request_revised(member: TeamMember):
         guild = bot.get_guild(GUILD_TOKEN)
         channel_to_post_in = guild.get_channel(CHANNEL_TOKEN)
         await channel_to_post_in.send(complete_message)
+
+@bot.command(name='viewscheduledjobs')
+async def view_scheduled_jobs(ctx):
+    if ctx.message.author.id != ADMIN_DISCORD_ID or not isinstance(ctx.channel, DMChannel):
+        await ctx.send("You're not authorized to view scheduled jobs.")
+        return
+
+    # Get all scheduled jobs using the Scheduler's method
+    scheduled_jobs = scheduler.get_all_scheduled_jobs(team_member_manager)
+
+    # Send the scheduled jobs to the admin user
+    for job in scheduled_jobs:
+        await ctx.send(job)
 
 @bot.command(name='statusrequestv2')
 async def status_request_v2(ctx, discord_id: int):

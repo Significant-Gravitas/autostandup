@@ -71,3 +71,25 @@ class Scheduler:
         if self.weekly_post_job_id:
             self.scheduler.remove_job(self.weekly_post_job_id)
             self.weekly_post_job_id = None
+
+    def get_all_scheduled_jobs(self, team_member_manager) -> List[str]:
+        """Retrieve all scheduled jobs as a list of strings."""
+        job_descriptions = []
+
+        for job in self.scheduler.get_jobs():
+            # Determine the associated team member by looking up the job ID in the job_ids dictionary
+            member_discord_id = next((discord_id for discord_id, job_ids in self.job_ids.items() if job.id in job_ids), None)
+            member_name = team_member_manager.find_member(member_discord_id).name if member_discord_id else "Unknown"
+
+            # Calculate the remaining time until the next run
+            now = datetime.now(job.next_run_time.tzinfo)  # Get the current time with the same timezone as the job's next_run_time
+            remaining_time = job.next_run_time - now
+            remaining_time_str = str(remaining_time).split('.')[0]  # Remove the microseconds part
+
+            # If this job is the weekly post job
+            if job.id == self.weekly_post_job_id:
+                job_descriptions.append(f"ID: {job.id}, Type: Weekly Post, Next Run: {job.next_run_time}, Remaining Time: {remaining_time_str}, Func: {job.func.__name__}")
+            else:
+                job_descriptions.append(f"ID: {job.id}, Member: {member_name}, Next Run: {job.next_run_time}, Remaining Time: {remaining_time_str}, Func: {job.func.__name__}")
+
+        return job_descriptions
