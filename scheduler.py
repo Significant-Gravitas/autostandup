@@ -54,13 +54,13 @@ class Scheduler:
             del self.job_ids[discord_id]  # Remove the job IDs from the dictionary
 
     def schedule_weekly_post(self, func: callable, weekly_post_manager: WeeklyPostManager, streaks_manager: StreaksManager, team_members: List[TeamMember]) -> None:
-        """Schedules the weekly post based on the earliest time zone among the team members."""
+        """Schedules the weekly post based on the latest time zone among the team members."""
         
-        # Determine the earliest time zone
-        earliest_time_zone = min([member.time_zone for member in team_members], key=lambda tz: datetime.now(pytz.timezone(tz)))
+        # Determine the latest time zone
+        latest_time_zone = max([member.time_zone for member in team_members], key=lambda tz: pytz.timezone(tz).utcoffset(datetime.utcnow()))
 
         # Set the trigger for 9:10 AM in the earliest time zone on Monday
-        trigger = CronTrigger(day_of_week='mon', hour=9, minute=10, timezone=earliest_time_zone)
+        trigger = CronTrigger(day_of_week='mon', hour=9, minute=10, timezone=latest_time_zone)
 
         # Schedule the function with the trigger
         job = self.scheduler.add_job(func, trigger, args=[weekly_post_manager, streaks_manager, team_members])
