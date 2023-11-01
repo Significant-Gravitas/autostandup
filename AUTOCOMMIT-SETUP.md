@@ -18,7 +18,7 @@ pip install openai
 2. Move the script to a directory in your PATH for easy access:
 
 ```bash
-sudo mv /path/to/autocommit /usr/local/bin/autocommit
+sudo mv /path/to/autocommit.py /usr/local/bin/autocommit
 ```
 
 3. Make the script executable:

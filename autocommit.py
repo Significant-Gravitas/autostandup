@@ -81,6 +81,7 @@ def main():
         print("No staged changes detected. Ensure you've staged your changes using 'git add <filename>' or use the '--stage-all' flag to stage all changes.")
         return
 
+    diff_with_context = original_diff
     context = input("Provide context or any specific details you'd like to include for generating the commit message: ")
     if context:
         diff_with_context = original_diff + "\n\nFurther user context to incorporate in commit message: " + context
