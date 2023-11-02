@@ -93,9 +93,12 @@ def get_all_commit_messages_for_user(org_name: str, token: str, member: TeamMemb
         local_tz = pytz.timezone(user_time_zone)
         localized_timestamp = local_tz.localize(last_update_timestamp)
         utc_timestamp = localized_timestamp.astimezone(pytz.utc)
-        since_date = utc_timestamp.isoformat() + 'Z'
+        # Format the timestamp for the GitHub API and append 'Z'
+        since_date = utc_timestamp.isoformat()
+        if not since_date.endswith('Z'):
+            since_date = utc_timestamp.isoformat().replace('+00:00', '') + 'Z'
     else:
-        # If no updates found, default to last 24 hours (or you can adjust this default behavior as needed)
+        # If no updates found, default to last 24 hours
         since_date = (datetime.utcnow() - timedelta(days=1)).isoformat() + 'Z'
 
     # Get a list of all repositories in the organization
@@ -138,65 +141,11 @@ async def send_status_request(member: TeamMember,
 
     user = bot.get_user(member.discord_id)
     if user:
-        # Notify the admin
+        # Notify the admin that a status request is being sent
         admin_user = bot.get_user(ADMIN_DISCORD_ID)
         if admin_user:
             await admin_user.send(f"Status request sent to {member.name}.")
 
-        # Cancel the previous wait_for task if it exists
-        ongoing_task: Task = ongoing_status_requests.get(member.discord_id)
-        if ongoing_task:
-            ongoing_task.cancel()
-
-        await user.send(
-            f"# Good morning {member.name}, time for your daily status update!\n"
-            f"## Please include in a single message:\n"
-            f"### What work-related tasks you accomplished on your last working day.\n"
-            f"### What work-related tasks you plan to work on today.\n"
-            f"### **(Note: We're currently only processing the first message you send back. Multi-message updates are coming soon!)**"
-        )
-
-        def check(m) -> bool:
-            return m.author == user and isinstance(m.channel, DMChannel)
-        
-        # Store the new wait_for task in the global dictionary
-        ongoing_task = ensure_future(bot.wait_for('message', check=check))
-        ongoing_status_requests[member.discord_id] = ongoing_task
-        
-        try:
-            msg = await ongoing_task
-            ongoing_status_requests.pop(member.discord_id, None)
-        except CancelledError:
-            return  # If the task is cancelled, do nothing
-
-        # Insert the status update into the database
-        updates_manager.insert_status(member.discord_id, msg.content, member.time_zone)
-
-        # Generate the daily summary using the UpdatesManager's method
-        summarized_message = await updates_manager.generate_daily_summary(msg.content)
-
-        updates_manager.update_summarized_status(member.discord_id, summarized_message)
-
-        # Update the streak for this member
-        streak = streaks_manager.get_streak(member.discord_id)
-        streaks_manager.update_streak(member.discord_id, streak + 1)
-        member.update_streak(streaks_manager.get_streak(member.discord_id))
-        member.increment_weekly_checkins()
-
-        # Update the Discord post using WeeklyPostManager
-        await weekly_post_manager.rebuild_post(team_member_manager.team_members)
-        
-        # Send the generated summary to a designated Discord channel
-        guild = bot.get_guild(GUILD_TOKEN)
-        channel_to_post_in = guild.get_channel(CHANNEL_TOKEN)
-        await channel_to_post_in.send(f"**{member.name}'s summary:**\n{summarized_message}")
-
-async def send_status_request_revised(member: TeamMember):
-    if member.weekly_checkins == 5:
-        return  # If already completed 5 check-ins, do nothing
-
-    user = bot.get_user(member.discord_id)
-    if user:
         # Cancel the previous task if it exists
         ongoing_task: Task = ongoing_status_requests.get(member.discord_id)
         if ongoing_task:
@@ -204,12 +153,14 @@ async def send_status_request_revised(member: TeamMember):
 
         # Retrieve all commit messages for the member
         commit_messages = get_all_commit_messages_for_user(ORG_NAME, ORG_TOKEN, member)
-            
+
         if not commit_messages:
             msg = "You have no commits for the previous working day."
         else:
             summarized_report = await updates_manager.summarize_technical_updates(commit_messages)
             msg = f"Here's your summarized report based on your commits:\n{summarized_report}\nReact with {THUMBS_UP_EMOJI} to confirm or {PENCIL_EMOJI} to suggest changes."
+
+        raw_updates = summarized_report
 
         # Send initial message and wait for reaction
         sent_message = await user.send(msg)
@@ -263,6 +214,8 @@ async def send_status_request_revised(member: TeamMember):
         ongoing_status_requests[member.discord_id] = ongoing_task
         non_technical_update_raw = await ongoing_task
         ongoing_status_requests.pop(member.discord_id, None)  # Remove the task once we get the non-technical update
+
+        raw_updates += f"\n\n{non_technical_update_raw.content}"
         
         # Summarize non-technical update with LLM
         non_technical_update = await updates_manager.summarize_non_technical_updates(non_technical_update_raw.content)
@@ -276,9 +229,24 @@ async def send_status_request_revised(member: TeamMember):
         ongoing_status_requests[member.discord_id] = ongoing_task
         goals_for_today_raw = await ongoing_task
         ongoing_status_requests.pop(member.discord_id, None)  # Remove the task once we get the goals
-        
+
         # Summarize goals for the day with LLM
         goals_for_today = await updates_manager.summarize_goals_for_the_day(goals_for_today_raw.content)
+
+        # Update the streak for this member
+        streak = streaks_manager.get_streak(member.discord_id)
+        streaks_manager.update_streak(member.discord_id, streak + 1)
+        member.update_streak(streaks_manager.get_streak(member.discord_id))
+        member.increment_weekly_checkins()
+
+        raw_updates += f"\n\n{goals_for_today_raw.content}"
+        final_updates = f"{summarized_report}\n\n{non_technical_update}\n\n{goals_for_today}"
+
+        updates_manager.insert_status(member.discord_id, raw_updates, member.time_zone)
+        updates_manager.update_summarized_status(member.discord_id, final_updates)
+
+        # Update the Discord post using WeeklyPostManager
+        await weekly_post_manager.rebuild_post(team_member_manager.team_members)
 
         # Member name update as a header
         member_update_header = f"## {member.name}'s Update:"
@@ -287,9 +255,9 @@ async def send_status_request_revised(member: TeamMember):
         final_report = (
             f"\n### Technical Update:\n"
             f"{summarized_report}\n"
-            f"\n### Non-Technical Update:\n"
+            f"### Non-Technical Update:\n"
             f"{non_technical_update}\n"
-            f"\n### Goals for Today:\n"
+            f"### Goals for Today:\n"
             f"{goals_for_today}"
         )
 
@@ -311,23 +279,6 @@ async def view_scheduled_jobs(ctx):
     # Send the scheduled jobs to the admin user
     for job in scheduled_jobs:
         await ctx.send(job)
-
-@bot.command(name='statusrequestv2')
-async def status_request_v2(ctx, discord_id: int):
-    if ctx.message.author.id != ADMIN_DISCORD_ID or not isinstance(ctx.channel, DMChannel):
-        await ctx.send("You're not authorized to test revised status.")
-        return
-
-    # Find the member object using the Discord ID
-    member_to_test = team_member_manager.find_member(discord_id)
-
-    if member_to_test:
-        # Send the revised status request to the member
-        await ctx.send(f"Revised status request sent to user with Discord ID {discord_id}.")
-        await send_status_request_revised(member_to_test)
-        await ctx.send(f"Revised status request process completed for user with Discord ID {discord_id}.")
-    else:
-        await ctx.send(f"No user with Discord ID {discord_id} found.")
 
 @bot.command(name='statusrequest')
 async def status_request(ctx, discord_id: int):
