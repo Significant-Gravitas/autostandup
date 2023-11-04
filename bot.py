@@ -101,36 +101,53 @@ def get_all_commit_messages_for_user(org_name: str, token: str, member: TeamMemb
         # If no updates found, default to last 24 hours
         since_date = (datetime.utcnow() - timedelta(days=1)).isoformat() + 'Z'
 
-    # Get a list of all repositories in the organization
-    repos_url = f"https://api.github.com/orgs/{org_name}/repos"
-    response = requests.get(repos_url, headers=headers)
-    
-    if response.status_code != 200:
-        # Handle errors
-        return []
-    
-    repos = response.json()
-    
     all_commit_messages = []
 
-    # Iterate over each repository
-    for repo in repos:
-        repo_name = repo["name"]
-        commits_url = f"https://api.github.com/repos/{org_name}/{repo_name}/commits?author={member.github_username}&since={since_date}"
-        response = requests.get(commits_url, headers=headers)
-        
+    # Paginate through all repositories in the organization
+    repos_url = f"https://api.github.com/orgs/{org_name}/repos?type=all&per_page=100"
+    while repos_url:
+        response = requests.get(repos_url, headers=headers)
         if response.status_code != 200:
-            continue
+            # Log error and break loop
+            print(f"Failed to fetch repos: {response.status_code} {response.text}")
+            break
         
-        commits = response.json()
-        
-        # Extract commit messages for this repository
-        # TODO: Potentially return commit URLs as well.
-        repo_commit_messages = [commit["commit"]["message"] for commit in commits]
-        
-        all_commit_messages.extend(repo_commit_messages)
-    
+        repos = response.json()
+
+        # Iterate over each repository
+        for repo in repos:
+            repo_name = repo["name"]
+            commits_url = f"https://api.github.com/repos/{org_name}/{repo_name}/commits?author={member.github_username}&since={since_date}&per_page=100"
+            # Paginate through commits for the repository
+            while commits_url:
+                response = requests.get(commits_url, headers=headers)
+                if response.status_code != 200:
+                    # Log error and continue to the next repository
+                    print(f"Failed to fetch commits for {repo_name}: {response.status_code} {response.text}")
+                    break
+                
+                commits = response.json()
+                repo_commit_messages = [commit["commit"]["message"] for commit in commits]
+                all_commit_messages.extend(repo_commit_messages)
+
+                # Check for the 'next' link for commits pagination
+                commits_url = get_pagination_link(response.headers, 'next')
+
+        # Check for the 'next' link for repositories pagination
+        repos_url = get_pagination_link(response.headers, 'next')
+
     return all_commit_messages
+
+def get_pagination_link(headers, rel):
+    """Extract pagination link for the 'rel' type from the Link header."""
+    link = headers.get('Link', None)
+    if link:
+        links = link.split(', ')
+        for link in links:
+            if 'rel="{}"'.format(rel) in link:
+                return link.split('; ')[0].strip('<>')
+
+    return None
 
 async def send_status_request(member: TeamMember, 
                               weekly_post_manager: WeeklyPostManager, 
