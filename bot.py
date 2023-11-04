@@ -204,7 +204,7 @@ async def send_status_request(member: TeamMember,
             await sent_message.remove_reaction(emoji, bot.user)
         
         while str(reaction.emoji) == PENCIL_EMOJI:
-            await user.send("Please provide your feedback or edit the status.")
+            await user.send("What would you like me to change?")
             
             # Store the new wait_for message (feedback) task in the global dictionary
             ongoing_task = ensure_future(bot.wait_for('message', check=check))
