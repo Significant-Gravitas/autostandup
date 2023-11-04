@@ -155,7 +155,8 @@ async def send_status_request(member: TeamMember,
         commit_messages = get_all_commit_messages_for_user(ORG_NAME, ORG_TOKEN, member)
 
         if not commit_messages:
-            msg = "You have no commits for the previous working day."
+            summarized_report = "You have no commits for the previous working day."
+            msg = f"{summarized_report}\nReact with {THUMBS_UP_EMOJI} to confirm or {PENCIL_EMOJI} to suggest changes."
         else:
             summarized_report = await updates_manager.summarize_technical_updates(commit_messages)
             msg = f"Here's your summarized report based on your commits:\n{summarized_report}\nReact with {THUMBS_UP_EMOJI} to confirm or {PENCIL_EMOJI} to suggest changes."
@@ -163,6 +164,12 @@ async def send_status_request(member: TeamMember,
         raw_updates = summarized_report
 
         # Send initial message and wait for reaction
+        await user.send(
+            f"# Good morning {member.name}, time for your daily status update!\n"
+            f"### I'm first going to check your commit messages and try to build a technical report for you.\n"
+            f"### Next I will ask you for any non-technical updates from your previous work day.\n"
+            f"### Finally I will ask you what you plan to work on today."
+        )
         sent_message = await user.send(msg)
         await sent_message.add_reaction(THUMBS_UP_EMOJI)
         await sent_message.add_reaction(PENCIL_EMOJI)
