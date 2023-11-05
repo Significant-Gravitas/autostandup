@@ -30,7 +30,10 @@ class StreaksDB(BaseDB):
                 FOREIGN KEY (discord_id) REFERENCES team_members(discord_id) ON DELETE CASCADE
             );
         '''
-        self.execute_query(query)
+        try:
+            self.execute_query(query)
+        finally:
+            self.close()
 
     def update_streak(self, discord_id: int, new_streak: int):
         """
@@ -45,7 +48,10 @@ class StreaksDB(BaseDB):
             ON DUPLICATE KEY UPDATE current_streak = %s
         """
         params = (discord_id, new_streak, new_streak)
-        self.execute_query(query, params)
+        try:
+            self.execute_query(query, params)
+        finally:
+            self.close()
 
     def get_streak(self, discord_id: int) -> int:
         """
@@ -57,10 +63,13 @@ class StreaksDB(BaseDB):
         if not self.conn.is_connected():
             print("Reconnecting to MySQL")
             self.connect()
-
         c = self.conn.cursor()
         query = "SELECT current_streak FROM streaks WHERE discord_id = %s"
         params = (discord_id,)
-        c.execute(query, params)
-        row = c.fetchone()
-        return row[0] if row else 0
+        try:
+            c.execute(query, params)
+            row = c.fetchone()
+            return row[0] if row else 0
+        finally:
+            c.close()
+            self.close()

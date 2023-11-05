@@ -50,3 +50,5 @@ class BaseDB:
         except errors.OperationalError as e:
             print(f"MySQL operational error: {e}")
             self.conn.rollback()
+        finally:
+            cursor.close()

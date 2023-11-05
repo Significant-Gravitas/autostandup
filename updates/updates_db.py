@@ -36,7 +36,10 @@ class UpdatesDB(BaseDB):
                 FOREIGN KEY (discord_id) REFERENCES team_members(discord_id) ON DELETE CASCADE
             )
         '''
-        self.execute_query(query)
+        try:
+            self.execute_query(query)
+        finally:
+            self.close()
 
     def insert_status(self, discord_id: int, status: str, time_zone: str):
         """
@@ -52,7 +55,10 @@ class UpdatesDB(BaseDB):
 
         query = "INSERT INTO updates (discord_id, status, timestamp, time_zone) VALUES (%s, %s, %s, %s)"
         params = (discord_id, status, local_now, time_zone)
-        self.execute_query(query, params)
+        try:
+            self.execute_query(query, params)
+        finally:
+            self.close()
 
     def update_summarized_status(self, discord_id: int, summarized_status: str):
         """
@@ -69,7 +75,10 @@ class UpdatesDB(BaseDB):
             LIMIT 1
         """
         params = (summarized_status, discord_id)
-        self.execute_query(query, params)
+        try:
+            self.execute_query(query, params)
+        finally:
+            self.close()
         
     def get_weekly_checkins_count(self, discord_id: int, time_zone: str) -> int:
         """
@@ -98,10 +107,14 @@ class UpdatesDB(BaseDB):
             WHERE discord_id = %s AND timestamp >= %s
         """
         params = (discord_id, monday)
-        c.execute(query, params)
-        
-        row = c.fetchone()
-        return row[0] if row else 0
+        try:
+            c.execute(query, params)
+            
+            row = c.fetchone()
+            return row[0] if row else 0
+        finally:
+            c.close()
+            self.close()
 
     def get_statuses_in_date_range(self, discord_id: int, start_date: datetime, end_date: datetime) -> List[str]:
         """
@@ -126,10 +139,14 @@ class UpdatesDB(BaseDB):
             WHERE discord_id = %s AND timestamp >= %s AND timestamp <= %s
         """
         params = (discord_id, start_date, end_date)
-        c.execute(query, params)
-        
-        statuses = [row[0] for row in c.fetchall()]
-        return statuses
+        try:
+            c.execute(query, params)
+            
+            statuses = [row[0] for row in c.fetchall()]
+            return statuses
+        finally:
+            c.close()
+            self.close()
     
     def get_all_statuses_for_user(self, discord_id: int) -> List[dict]:
         """
@@ -154,10 +171,14 @@ class UpdatesDB(BaseDB):
             ORDER BY timestamp DESC
         """
         params = (discord_id,)
-        c.execute(query, params)
-        
-        statuses = c.fetchall()
-        return statuses
+        try:
+            c.execute(query, params)
+            
+            statuses = c.fetchall()
+            return statuses
+        finally:
+            c.close()
+            self.close()
     
     def get_last_update_timestamp(self, discord_id: int) -> Tuple[datetime, str]:
         """
@@ -182,10 +203,14 @@ class UpdatesDB(BaseDB):
             LIMIT 1
         """
         params = (discord_id,)
-        c.execute(query, params)
-        
-        row = c.fetchone()
-        return (row[0], row[1]) if row else (None, None)
+        try:
+            c.execute(query, params)
+            
+            row = c.fetchone()
+            return (row[0], row[1]) if row else (None, None)
+        finally:
+            c.close()
+            self.close()
     
     def delete_newest_status(self, discord_id: int) -> None:
         """
@@ -207,16 +232,20 @@ class UpdatesDB(BaseDB):
             ORDER BY timestamp DESC
             LIMIT 1
         """
-        c.execute(query_get_id, (discord_id,))
-        
-        row = c.fetchone()
-        if row:
-            status_id = row[0]
+        try:
+            c.execute(query_get_id, (discord_id,))
             
-            # Now, delete the status update using its ID
-            query_delete = """
-                DELETE FROM updates WHERE id = %s
-            """
-            c.execute(query_delete, (status_id,))
-            
-            self.conn.commit()
+            row = c.fetchone()
+            if row:
+                status_id = row[0]
+                
+                # Now, delete the status update using its ID
+                query_delete = """
+                    DELETE FROM updates WHERE id = %s
+                """
+                c.execute(query_delete, (status_id,))
+                
+                self.conn.commit()
+        finally:
+            c.close()
+            self.close()

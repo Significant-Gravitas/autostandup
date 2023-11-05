@@ -31,7 +31,10 @@ class TeamMemberDB(BaseDB):
                 github_username VARCHAR(255)
             );
         '''
-        self.execute_query(query)
+        try:
+            self.execute_query(query)
+        finally:
+            self.close()
 
     def insert_new_member(self, discord_id: int, name: str, time_zone: str, github_username: str):
         """
@@ -48,7 +51,10 @@ class TeamMemberDB(BaseDB):
             ON DUPLICATE KEY UPDATE name = %s, time_zone = %s, github_username = %s
         """
         params = (discord_id, name, time_zone, github_username, name, time_zone, github_username)
-        self.execute_query(query, params)
+        try:
+            self.execute_query(query, params)
+        finally:
+            self.close()
 
     def remove_member(self, discord_id: int):
         """
@@ -58,7 +64,10 @@ class TeamMemberDB(BaseDB):
         """
         query = "DELETE FROM team_members WHERE discord_id = %s"
         params = (discord_id,)
-        self.execute_query(query, params)
+        try:
+            self.execute_query(query, params)
+        finally:
+            self.close()
 
     def list_all_members(self) -> List[Tuple[int, str, str, str]]:
         """
@@ -69,7 +78,10 @@ class TeamMemberDB(BaseDB):
         if not self.conn.is_connected():
             print("Reconnecting to MySQL")
             self.connect()
-
         c = self.conn.cursor()
-        c.execute("SELECT discord_id, name, time_zone, github_username FROM team_members")
-        return c.fetchall()
+        try:
+            c.execute("SELECT discord_id, name, time_zone, github_username FROM team_members")
+            return c.fetchall()
+        finally:
+            c.close()
+            self.close()

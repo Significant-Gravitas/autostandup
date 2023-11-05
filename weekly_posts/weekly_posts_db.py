@@ -32,7 +32,10 @@ class WeeklyPostsDB(BaseDB):
                 timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
         '''
-        self.execute_query(query)
+        try:
+            self.execute_query(query)
+        finally:
+            self.close()
 
     def get_weekly_post_data(self) -> Optional[Dict[str, datetime.datetime]]:
         """
@@ -47,12 +50,16 @@ class WeeklyPostsDB(BaseDB):
             self.connect()
 
         c = self.conn.cursor()
-        c.execute(query)
-        row = c.fetchone()
+        try:
+            c.execute(query)
+            row = c.fetchone()
 
-        if row:
-            return {'post_id': row[0], 'timestamp': row[1]}
-        return None
+            if row:
+                return {'post_id': row[0], 'timestamp': row[1]}
+            return None
+        finally:
+            c.close()
+            self.close()
 
     def save_weekly_post_data(self, post_id: int, timestamp: datetime.datetime):
         """
@@ -67,4 +74,7 @@ class WeeklyPostsDB(BaseDB):
             ON DUPLICATE KEY UPDATE timestamp = %s
         """
         params = (post_id, timestamp, timestamp)
-        self.execute_query(query, params)
+        try:
+            self.execute_query(query, params)
+        finally:
+            self.close()
