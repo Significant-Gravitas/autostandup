@@ -1,6 +1,7 @@
 # Import required modules
 import os
 import pytz
+import asyncio
 from typing import List
 from dotenv import load_dotenv
 from datetime import datetime, timedelta
@@ -216,9 +217,10 @@ async def send_status_request(member: TeamMember,
             summarized_report = await updates_manager.summarize_feedback_and_revisions(summarized_report, feedback.content)
             msg = f"Here's the revised report:\n{summarized_report}\nReact with {THUMBS_UP_EMOJI} to confirm or {PENCIL_EMOJI} to provide further feedback."
             
-            sent_message = await user.send(msg)
-            await sent_message.add_reaction(THUMBS_UP_EMOJI)
-            await sent_message.add_reaction(PENCIL_EMOJI)
+            last_sent_message = await send_long_message(user, msg)
+            if last_sent_message:
+                await last_sent_message.add_reaction(THUMBS_UP_EMOJI)
+                await last_sent_message.add_reaction(PENCIL_EMOJI)
             
             # Store the new wait_for reaction task in the global dictionary
             ongoing_task = ensure_future(bot.wait_for('reaction_add', check=lambda r, u: u == user and r.message.id == sent_message.id and isinstance(r.message.channel, DMChannel) and str(r.emoji) in [THUMBS_UP_EMOJI, PENCIL_EMOJI]))
@@ -290,6 +292,37 @@ async def send_status_request(member: TeamMember,
         guild = bot.get_guild(GUILD_TOKEN)
         channel_to_post_in = guild.get_channel(CHANNEL_TOKEN)
         await channel_to_post_in.send(complete_message)
+
+async def send_long_message(user, msg):
+    max_length = 2000  # Discord's max character limit for a message
+    sent_messages = []  # Keep track of all messages sent
+    while len(msg) > 0:
+        # If the message is shorter than the max length, send it as is
+        if len(msg) <= max_length:
+            sent_message = await user.send(msg)
+            sent_messages.append(sent_message)
+            break  # The message is sent, so break out of the loop
+        
+        # Find the nearest newline character before the max_length
+        split_index = msg.rfind('\n', 0, max_length)
+        
+        # If no newline is found, just split at max_length
+        if split_index == -1:
+            split_index = max_length
+        
+        # Split the message at the found index and send the first part
+        part_to_send = msg[:split_index].strip()
+        sent_message = await user.send(part_to_send)
+        sent_messages.append(sent_message)
+        
+        # Wait a bit to respect Discord's rate limits
+        await asyncio.sleep(1)
+        
+        # Remove the part that was sent from the message
+        msg = msg[split_index:].strip()
+    
+    # Return the last message sent for reaction addition
+    return sent_messages[-1] if sent_messages else None
 
 @bot.command(name='viewscheduledjobs')
 async def view_scheduled_jobs(ctx):
