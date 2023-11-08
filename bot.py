@@ -294,15 +294,15 @@ async def send_status_request(member: TeamMember,
         guild = bot.get_guild(GUILD_TOKEN)
         channel_to_post_in = guild.get_channel(CHANNEL_TOKEN)
         await user.send(stand_up_feedback)
-        await channel_to_post_in.send(complete_message)
+        await send_long_message(channel_to_post_in, complete_message)
 
-async def send_long_message(user, msg):
+async def send_long_message(destination, msg):
     max_length = 2000  # Discord's max character limit for a message
     sent_messages = []  # Keep track of all messages sent
     while len(msg) > 0:
         # If the message is shorter than the max length, send it as is
         if len(msg) <= max_length:
-            sent_message = await user.send(msg)
+            sent_message = await destination.send(msg)
             sent_messages.append(sent_message)
             break  # The message is sent, so break out of the loop
         
@@ -315,7 +315,7 @@ async def send_long_message(user, msg):
         
         # Split the message at the found index and send the first part
         part_to_send = msg[:split_index].strip()
-        sent_message = await user.send(part_to_send)
+        sent_message = await destination.send(part_to_send)
         sent_messages.append(sent_message)
         
         # Wait a bit to respect Discord's rate limits
