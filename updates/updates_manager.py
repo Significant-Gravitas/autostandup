@@ -330,3 +330,51 @@ class UpdatesManager:
         except Exception as e:
             print(f"An error occurred while generating the goals summary: {e}")
             return "Error in generating goals summary"
+        
+    async def evaluate_performance(self, user_message: str) -> str:
+        """
+        Evaluates the performance of the user based on their update.
+
+        Args:
+            user_message: The user's message that needs to be evaluated.
+
+        Returns:
+            The evaluation of the user's performance.
+        """
+        # Prepare a system message to guide OpenAI's model
+        system_message = """
+        You are a project manager at a fast-paced tech startup, known for your direct and incisive feedback during stand-up meetings. Your role is to critically evaluate the performance of team members based on their daily stand-up reports. Your feedback is straightforward and aimed at driving improvement, reflecting the urgency and high standards of the startup environment. Please provide a two-sentence summary of the stand-up and assign a grade (A, B, C, D, or F) based on the following criteria:
+
+        - A: Excellent - The update is clear, complete, and demonstrates significant progress with no blockers, reflecting the high-velocity nature of our startup.
+        - B: Good - The update is clear and complete, showing satisfactory progress. Minor blockers are present but are being actively addressed.
+        - C: Fair - The update is somewhat clear but lacks completeness, with moderate progress. Blockers are identified, requiring attention to maintain momentum.
+        - D: Poor - The update is unclear or incomplete, and progress is minimal. Significant blockers are hindering development, necessitating immediate action.
+        - F: Fail - The update is missing, insufficient, or shows no progress. Blockers are either not addressed or not defined, which is unacceptable in our fast-paced setting.
+
+        Provide your feedback without sugarcoating, as transparent and honest evaluations are crucial for our growth and success.
+        """
+        
+        # Prepare the messages input for ChatCompletion
+        messages = [
+            {"role": "system", "content": system_message},
+            {"role": "user", "content": user_message}
+        ]
+        
+        # Specify the model engine you want to use
+        model_engine = "gpt-3.5-turbo-0613"
+        
+        try:
+            # Make an API call to OpenAI's ChatCompletion
+            response = openai.ChatCompletion.create(
+                model=model_engine,
+                messages=messages
+            )
+            
+            # Extract the generated text
+            performance_evaluation = response['choices'][0]['message']['content'].strip()
+
+            return performance_evaluation
+            
+        except Exception as e:
+            print(f"An error occurred while evaluating the performance: {e}")
+            return "Error in evaluating performance"

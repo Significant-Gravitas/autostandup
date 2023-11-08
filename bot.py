@@ -223,13 +223,13 @@ async def send_status_request(member: TeamMember,
                 await last_sent_message.add_reaction(PENCIL_EMOJI)
             
             # Store the new wait_for reaction task in the global dictionary
-            ongoing_task = ensure_future(bot.wait_for('reaction_add', check=lambda r, u: u == user and r.message.id == sent_message.id and isinstance(r.message.channel, DMChannel) and str(r.emoji) in [THUMBS_UP_EMOJI, PENCIL_EMOJI]))
+            ongoing_task = ensure_future(bot.wait_for('reaction_add', check=lambda r, u: u == user and r.message.id == last_sent_message.id and isinstance(r.message.channel, DMChannel) and str(r.emoji) in [THUMBS_UP_EMOJI, PENCIL_EMOJI]))
             ongoing_status_requests[member.discord_id] = ongoing_task
             reaction, user = await ongoing_task
             ongoing_status_requests.pop(member.discord_id, None)  # Remove the task once we get the reaction
 
             for emoji in [THUMBS_UP_EMOJI, PENCIL_EMOJI]:
-                await sent_message.remove_reaction(emoji, bot.user)
+                await last_sent_message.remove_reaction(emoji, bot.user)
                 
         # Prompt user for non-technical updates from the previous day
         non_technical_msg_prompt = "Please provide any non-technical updates from your previous working day, e.g., important meetings, interviews, etc."
@@ -245,6 +245,8 @@ async def send_status_request(member: TeamMember,
         
         # Summarize non-technical update with LLM
         non_technical_update = await updates_manager.summarize_non_technical_updates(non_technical_update_raw.content)
+
+        stand_up_feedback = await updates_manager.evaluate_performance(f"{summarized_report}\n\n{non_technical_update}")
         
         # Prompt user for their goals for the day
         goals_msg_prompt = "What do you plan to work on or accomplish today?"
@@ -291,6 +293,7 @@ async def send_status_request(member: TeamMember,
         complete_message = f"{member_update_header}{final_report}"
         guild = bot.get_guild(GUILD_TOKEN)
         channel_to_post_in = guild.get_channel(CHANNEL_TOKEN)
+        await user.send(stand_up_feedback)
         await channel_to_post_in.send(complete_message)
 
 async def send_long_message(user, msg):
