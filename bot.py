@@ -246,8 +246,6 @@ async def send_status_request(member: TeamMember,
         # Summarize non-technical update with LLM
         non_technical_update = await updates_manager.summarize_non_technical_updates(non_technical_update_raw.content)
 
-        stand_up_feedback = await updates_manager.evaluate_performance(f"{summarized_report}\n\n{non_technical_update}")
-        
         # Prompt user for their goals for the day
         goals_msg_prompt = "What do you plan to work on or accomplish today?"
         await user.send(goals_msg_prompt)
@@ -288,6 +286,8 @@ async def send_status_request(member: TeamMember,
             f"### Goals for Today:\n"
             f"{goals_for_today}"
         )
+
+        stand_up_feedback = await updates_manager.evaluate_performance(final_report)
 
         # Concatenate the member name update with the final report and send to the designated Discord channel
         complete_message = f"{member_update_header}{final_report}"
