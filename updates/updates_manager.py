@@ -103,7 +103,7 @@ class UpdatesManager:
         ]
         
         # Specify the model engine you want to use
-        model_engine = "gpt-3.5-turbo-0613"
+        model_engine = "gpt-3.5-turbo-1106"
         
         try:
             # Make an API call to OpenAI's ChatCompletion
@@ -196,7 +196,7 @@ class UpdatesManager:
             {"role": "user", "content": combined_commits}
         ]
 
-        model_engine = "gpt-3.5-turbo-0613"
+        model_engine = "gpt-3.5-turbo-1106"
 
         try:
             response = openai.ChatCompletion.create(
@@ -235,7 +235,7 @@ class UpdatesManager:
         ]
         
         # Specify the model engine you want to use
-        model_engine = "gpt-3.5-turbo-0613"
+        model_engine = "gpt-3.5-turbo-1106"
         
         try:
             # Make an API call to OpenAI's ChatCompletion
@@ -274,7 +274,7 @@ class UpdatesManager:
         ]
 
         # Specify the model engine you want to use
-        model_engine = "gpt-3.5-turbo-0613"
+        model_engine = "gpt-3.5-turbo-1106"
 
         try:
             # Make an API call to OpenAI's ChatCompletion
@@ -312,7 +312,7 @@ class UpdatesManager:
         ]
         
         # Specify the model engine you want to use (this is an example and can be adjusted based on your needs)
-        model_engine = "gpt-3.5-turbo-0613"
+        model_engine = "gpt-3.5-turbo-1106"
         
         try:
             # Provide user's input and retrieve model's response
@@ -366,7 +366,7 @@ class UpdatesManager:
         ]
         
         # Specify the model engine you want to use
-        model_engine = "gpt-3.5-turbo-0613"
+        model_engine = "gpt-3.5-turbo-1106"
         
         try:
             # Make an API call to OpenAI's ChatCompletion
