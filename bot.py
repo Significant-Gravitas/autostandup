@@ -68,6 +68,7 @@ ongoing_status_requests = {}
 
 THUMBS_UP_EMOJI = "👍"
 PENCIL_EMOJI = "✏️"
+REPORT_SUBMISSION_EMOJI = '📝'
 
 async def weekly_state_reset(weekly_post_manager: WeeklyPostManager, streaks_manager: StreaksManager, team_members: List[TeamMember]):
     # Reset streaks for the previous week
@@ -174,10 +175,10 @@ async def send_status_request(member: TeamMember,
 
         if not commit_messages:
             summarized_report = "You have no commits for the previous working day."
-            msg = f"{summarized_report}\nReact with {THUMBS_UP_EMOJI} to confirm or {PENCIL_EMOJI} to suggest changes."
+            msg = f"{summarized_report}\nReact with {THUMBS_UP_EMOJI} to confirm, {PENCIL_EMOJI} to iterate with AI, or {REPORT_SUBMISSION_EMOJI} to submit your own report."
         else:
             summarized_report = await updates_manager.summarize_technical_updates(commit_messages)
-            msg = f"Here's your summarized report based on your commits:\n{summarized_report}\nReact with {THUMBS_UP_EMOJI} to confirm or {PENCIL_EMOJI} to suggest changes."
+            msg = f"Here's your summarized report based on your commits:\n{summarized_report}\nReact with {THUMBS_UP_EMOJI} to confirm, {PENCIL_EMOJI} to iterate with AI, or {REPORT_SUBMISSION_EMOJI} to submit your own report."
 
         raw_updates = summarized_report
 
@@ -191,44 +192,60 @@ async def send_status_request(member: TeamMember,
         sent_message = await user.send(msg)
         await sent_message.add_reaction(THUMBS_UP_EMOJI)
         await sent_message.add_reaction(PENCIL_EMOJI)
+        await sent_message.add_reaction(REPORT_SUBMISSION_EMOJI)
         
         def check(m) -> bool:
             return m.author == user and isinstance(m.channel, DMChannel)
 
         # Store the new wait_for reaction task in the global dictionary
-        ongoing_task = ensure_future(bot.wait_for('reaction_add', check=lambda r, u: u == user and r.message.id == sent_message.id and isinstance(r.message.channel, DMChannel) and str(r.emoji) in [THUMBS_UP_EMOJI, PENCIL_EMOJI]))
+        ongoing_task = ensure_future(bot.wait_for('reaction_add', check=lambda r, u: u == user and r.message.id == sent_message.id and isinstance(r.message.channel, DMChannel) and str(r.emoji) in [THUMBS_UP_EMOJI, PENCIL_EMOJI, REPORT_SUBMISSION_EMOJI]))
         ongoing_status_requests[member.discord_id] = ongoing_task
         reaction, reactor = await ongoing_task
         ongoing_status_requests.pop(member.discord_id, None)  # Remove the task once we get the reaction
         
-        for emoji in [THUMBS_UP_EMOJI, PENCIL_EMOJI]:
+        for emoji in [THUMBS_UP_EMOJI, PENCIL_EMOJI, REPORT_SUBMISSION_EMOJI]:
             await sent_message.remove_reaction(emoji, bot.user)
         
-        while str(reaction.emoji) == PENCIL_EMOJI:
-            await user.send("What would you like me to change?")
-            
-            # Store the new wait_for message (feedback) task in the global dictionary
-            ongoing_task = ensure_future(bot.wait_for('message', check=check))
-            ongoing_status_requests[member.discord_id] = ongoing_task
-            feedback = await ongoing_task
-            ongoing_status_requests.pop(member.discord_id, None)  # Remove the task once we get the feedback
+        while str(reaction.emoji) in [PENCIL_EMOJI, REPORT_SUBMISSION_EMOJI]:
+            if str(reaction.emoji) == PENCIL_EMOJI:
+                await user.send("What would you like me to change?")
                 
-            # Send original + feedback to LLM for reformatting
-            summarized_report = await updates_manager.summarize_feedback_and_revisions(summarized_report, feedback.content)
-            msg = f"Here's the revised report:\n{summarized_report}\nReact with {THUMBS_UP_EMOJI} to confirm or {PENCIL_EMOJI} to provide further feedback."
+                # Store the new wait_for message (feedback) task in the global dictionary
+                ongoing_task = ensure_future(bot.wait_for('message', check=check))
+                ongoing_status_requests[member.discord_id] = ongoing_task
+                feedback = await ongoing_task
+                ongoing_status_requests.pop(member.discord_id, None)  # Remove the task once we get the feedback
+                    
+                # Send original + feedback to LLM for reformatting
+                summarized_report = await updates_manager.summarize_feedback_and_revisions(summarized_report, feedback.content)
+
+            elif str(reaction.emoji) == REPORT_SUBMISSION_EMOJI:
+                await user.send("Please submit your technical report directly.")
+                
+                # Store the new wait_for message (report submission) task in the global dictionary
+                ongoing_task = ensure_future(bot.wait_for('message', check=check))
+                ongoing_status_requests[member.discord_id] = ongoing_task
+                direct_report = await ongoing_task
+                ongoing_status_requests.pop(member.discord_id, None)  # Remove the task once we get the report
+
+                summarized_report = direct_report.content
+                break  # Exit the while loop as the user has submitted their report directly
+
+            msg = f"Here's the revised report:\n{summarized_report}\nReact with {THUMBS_UP_EMOJI} to confirm, {PENCIL_EMOJI} to iterate with AI, or {REPORT_SUBMISSION_EMOJI} to submit your own report."
             
             last_sent_message = await send_long_message(user, msg)
             if last_sent_message:
                 await last_sent_message.add_reaction(THUMBS_UP_EMOJI)
                 await last_sent_message.add_reaction(PENCIL_EMOJI)
+                await last_sent_message.add_reaction(REPORT_SUBMISSION_EMOJI)
             
             # Store the new wait_for reaction task in the global dictionary
-            ongoing_task = ensure_future(bot.wait_for('reaction_add', check=lambda r, u: u == user and r.message.id == last_sent_message.id and isinstance(r.message.channel, DMChannel) and str(r.emoji) in [THUMBS_UP_EMOJI, PENCIL_EMOJI]))
+            ongoing_task = ensure_future(bot.wait_for('reaction_add', check=lambda r, u: u == user and r.message.id == last_sent_message.id and isinstance(r.message.channel, DMChannel) and str(r.emoji) in [THUMBS_UP_EMOJI, PENCIL_EMOJI, REPORT_SUBMISSION_EMOJI]))
             ongoing_status_requests[member.discord_id] = ongoing_task
             reaction, user = await ongoing_task
             ongoing_status_requests.pop(member.discord_id, None)  # Remove the task once we get the reaction
 
-            for emoji in [THUMBS_UP_EMOJI, PENCIL_EMOJI]:
+            for emoji in [THUMBS_UP_EMOJI, PENCIL_EMOJI, REPORT_SUBMISSION_EMOJI]:
                 await last_sent_message.remove_reaction(emoji, bot.user)
                 
         # Prompt user for non-technical updates from the previous day
