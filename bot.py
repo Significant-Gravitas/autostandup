@@ -428,6 +428,27 @@ async def list_users(ctx):
 
     await ctx.send(f"List of users:\n{user_list}")
 
+@bot.command(name='updatetimezone')
+async def update_timezone(ctx, discord_id: int, new_time_zone: str):
+    if ctx.message.author.id != ADMIN_DISCORD_ID or not isinstance(ctx.channel, DMChannel):
+        await ctx.send("You're not authorized to update timezones.")
+        return
+
+    # Find the member object using the Discord ID
+    member_to_update = team_member_manager.find_member(discord_id)
+
+    if member_to_update:
+        # Update the timezone in the database
+        team_member_manager.update_member_timezone(discord_id, new_time_zone)
+        scheduler.remove_job(discord_id)
+        scheduler.add_job(send_status_request, member_to_update, weekly_post_manager, streaks_manager, updates_manager)
+        scheduler.unschedule_weekly_post()
+        scheduler.schedule_weekly_post(weekly_state_reset, weekly_post_manager, streaks_manager, team_member_manager.team_members)
+
+        await ctx.send(f"Timezone for user with Discord ID {discord_id} updated to {new_time_zone}.")
+    else:
+        await ctx.send(f"No user with Discord ID {discord_id} found.")
+
 @bot.command(name='updatestreak')
 async def update_streak(ctx, discord_id: int, new_streak: int):
     if ctx.message.author.id != ADMIN_DISCORD_ID or not isinstance(ctx.channel, DMChannel):

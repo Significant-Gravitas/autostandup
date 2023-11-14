@@ -85,3 +85,17 @@ class TeamMemberDB(BaseDB):
         finally:
             c.close()
             self.close()
+
+    def update_member_timezone(self, discord_id: int, new_time_zone: str):
+        """
+        Updates the timezone of a team member in the 'team_members' table.
+
+        :param discord_id: The Discord ID of the team member.
+        :param new_time_zone: The new timezone to be set for the team member.
+        """
+        query = "UPDATE team_members SET time_zone = %s WHERE discord_id = %s"
+        params = (new_time_zone, discord_id)
+        try:
+            self.execute_query(query, params)
+        finally:
+            self.close()

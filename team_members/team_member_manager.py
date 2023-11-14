@@ -69,3 +69,18 @@ class TeamMemberManager:
         """
         self.db.remove_member(discord_id)
         self.team_members = [member for member in self.team_members if member.discord_id != discord_id]
+
+    def update_member_timezone(self, discord_id: int, new_time_zone: str):
+        """
+        Update the timezone of a team member in the database and the list.
+
+        :param discord_id: The Discord ID of the member to update.
+        :param new_time_zone: The new timezone string to set for the member.
+        """
+        # Update the timezone in the database
+        self.db.update_member_timezone(discord_id, new_time_zone)
+
+        # Find the member in the team_members list and update their timezone
+        member = self.find_member(discord_id)
+        if member:
+            member.time_zone = new_time_zone
