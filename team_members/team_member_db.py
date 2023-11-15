@@ -28,7 +28,8 @@ class TeamMemberDB(BaseDB):
                 discord_id BIGINT PRIMARY KEY,
                 name VARCHAR(255) NOT NULL,
                 time_zone VARCHAR(50) NOT NULL,
-                github_username VARCHAR(255)
+                github_username VARCHAR(255),
+                on_vacation BOOLEAN DEFAULT FALSE
             );
         '''
         try:
@@ -69,18 +70,18 @@ class TeamMemberDB(BaseDB):
         finally:
             self.close()
 
-    def list_all_members(self) -> List[Tuple[int, str, str, str]]:
+    def list_all_members(self) -> List[Tuple[int, str, str, str, bool]]:
         """
         Fetches all team members from the 'team_members' table.
 
-        :return: A list of tuples, each containing the Discord ID, name, time zone, and GitHub username of a team member.
+        :return: A list of tuples, each containing the Discord ID, name, time zone, GitHub username, and vacation status of a team member.
         """
         if not self.conn.is_connected():
             print("Reconnecting to MySQL")
             self.connect()
         c = self.conn.cursor()
         try:
-            c.execute("SELECT discord_id, name, time_zone, github_username FROM team_members")
+            c.execute("SELECT discord_id, name, time_zone, github_username, on_vacation FROM team_members")
             return c.fetchall()
         finally:
             c.close()
@@ -95,6 +96,20 @@ class TeamMemberDB(BaseDB):
         """
         query = "UPDATE team_members SET time_zone = %s WHERE discord_id = %s"
         params = (new_time_zone, discord_id)
+        try:
+            self.execute_query(query, params)
+        finally:
+            self.close()
+
+    def set_vacation_status(self, discord_id: int, on_vacation: bool):
+        """
+        Sets the vacation status of a team member in the 'team_members' table.
+
+        :param discord_id: The Discord ID of the team member.
+        :param on_vacation: The vacation status to be set for the team member.
+        """
+        query = "UPDATE team_members SET on_vacation = %s WHERE discord_id = %s"
+        params = (on_vacation, discord_id)
         try:
             self.execute_query(query, params)
         finally:

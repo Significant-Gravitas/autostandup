@@ -11,7 +11,7 @@ class TeamMember:
     """
     
     def __init__(self, discord_id: int, time_zone: str, name: str, github_username: str,
-                 current_streak: int = 0, weekly_checkins: int = 0) -> None:
+                 current_streak: int = 0, weekly_checkins: int = 0, on_vacation: bool = False) -> None:
         """Initialize a new TeamMember object.
         
         Args:
@@ -28,6 +28,7 @@ class TeamMember:
         self.github_username: str = github_username
         self.current_streak: int = current_streak
         self.weekly_checkins: int = weekly_checkins
+        self.on_vacation: bool = on_vacation
     
     def update_streak(self, streak: int) -> None:
         """Update the current streak of the team member.

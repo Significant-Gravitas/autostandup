@@ -30,7 +30,8 @@ class TeamMemberManager:
                 discord_id=member_data[0],
                 time_zone=member_data[2],
                 name=member_data[1],
-                github_username=member_data[3]
+                github_username=member_data[3],
+                on_vacation=member_data[4]
             )
             team_members.append(member)
 
@@ -84,3 +85,18 @@ class TeamMemberManager:
         member = self.find_member(discord_id)
         if member:
             member.time_zone = new_time_zone
+
+    def set_member_vacation_status(self, discord_id: int, on_vacation: bool):
+        """
+        Sets the vacation status of a team member.
+
+        :param discord_id: The Discord ID of the team member.
+        :param on_vacation: The vacation status to be set for the team member.
+        """
+        # Update the vacation status in the database
+        self.db.set_vacation_status(discord_id, on_vacation)
+
+        # Find the member in the team_members list and update their vacation status
+        member = self.find_member(discord_id)
+        if member:
+            member.on_vacation = on_vacation

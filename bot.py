@@ -73,7 +73,7 @@ REPORT_SUBMISSION_EMOJI = '📝'
 async def weekly_state_reset(weekly_post_manager: WeeklyPostManager, streaks_manager: StreaksManager, team_members: List[TeamMember]):
     # Reset streaks for the previous week
     for member in team_members:
-        if member.weekly_checkins < 5:
+        if not member.on_vacation and member.weekly_checkins < 5:
             streaks_manager.reset_streak(member.discord_id)
             member.reset_streak()
         member.reset_weekly_checkins()
@@ -516,6 +516,20 @@ async def view_user(ctx, discord_id: int):
         await ctx.send(f"### **Timestamp:** {status['timestamp']}")
         await ctx.send(f"### **Raw Status:** {status['status']}")
         await ctx.send(f"### **Summarized Status:** \n{status['summarized_status']}")
+
+@bot.command(name='setvacationstatus')
+async def set_vacation_status(ctx, discord_id: int):
+    if ctx.message.author.id != ADMIN_DISCORD_ID or not isinstance(ctx.channel, DMChannel):
+        await ctx.send("You're not authorized to set vacation status.")
+        return
+
+    member = team_member_manager.find_member(discord_id)
+    if member:
+        new_status = not member.on_vacation
+        team_member_manager.set_member_vacation_status(discord_id, new_status)
+        await ctx.send(f"Vacation status for user with Discord ID {discord_id} set to {'on vacation' if new_status else 'not on vacation'}.")
+    else:
+        await ctx.send(f"No user with Discord ID {discord_id} found.")
 
 @bot.command(name='weeklysummary')
 async def weekly_summary(ctx, discord_id: int, start_date: str, end_date: str):
