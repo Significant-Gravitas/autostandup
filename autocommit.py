@@ -11,10 +11,10 @@ exit 1
 ' '''
 
 import os
-import openai
 import sys
 import subprocess
 from dotenv import load_dotenv
+import openai
 
 # Load environment variables from the .env file
 load_dotenv()

@@ -367,8 +367,14 @@ async def status_request(ctx, discord_id: int):
     member_to_request = team_member_manager.find_member(discord_id)
 
     if member_to_request:
+        for member in team_member_manager.team_members:
+            scheduler.remove_job(member.discord_id)
+        scheduler.unschedule_weekly_post()
         # Send the status request to the member
         await ctx.send(f"Status request sent to user with Discord ID {discord_id}.")
+        for member in team_member_manager.team_members:
+            scheduler.add_job(send_status_request, member, weekly_post_manager, streaks_manager, updates_manager)
+        scheduler.schedule_weekly_post(weekly_state_reset, weekly_post_manager, streaks_manager, team_member_manager.team_members)
         await send_status_request(member_to_request, weekly_post_manager, streaks_manager, updates_manager)
         await ctx.send(f"Status request received from user with Discord ID {discord_id}.")
     else:
